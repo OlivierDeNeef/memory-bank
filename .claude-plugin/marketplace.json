@@ -1,0 +1,30 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "app-space",
+  "description": "DeepMind plugin marketplace - persistent memory system for AI assistants",
+  "version": "1.0.0",
+  "owner": {
+    "name": "Olivier de Neef"
+  },
+  "plugins": [
+    {
+      "name": "deepmind",
+      "description": "Persistent memory system for AI assistants. Recall, remember, forget, and search your second mind via slash commands.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Olivier de Neef"
+      },
+      "source": "./src/DeepMind.Plugin",
+      "category": "productivity",
+      "license": "MIT",
+      "keywords": [
+        "memory",
+        "recall",
+        "knowledge",
+        "mcp",
+        "semantic-search",
+        "second-mind"
+      ]
+    }
+  ]
+}

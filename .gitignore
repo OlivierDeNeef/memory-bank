@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.db
+*.log
+.deepmind/
+
+# Large model files - download separately or use Git LFS
+*.onnx

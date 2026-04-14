@@ -1,0 +1,12 @@
+{
+  "fiveHour": 1,
+  "sevenDay": 26,
+  "sevenDaySonnet": 4,
+  "sevenDayOpus": null,
+  "fiveHourResetAt": "2026-04-15T01:00:01.042Z",
+  "sevenDayResetAt": "2026-04-18T16:00:00.043Z",
+  "sevenDaySonnetResetAt": "2026-04-16T20:00:00.043Z",
+  "sevenDayOpusResetAt": null,
+  "extraUsageEnabled": true,
+  "updatedAt": 1776200262204
+}
