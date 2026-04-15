@@ -262,6 +262,133 @@ public class MemoryStore
         return cmd.ExecuteScalar() != null;
     }
 
+    /// <summary>
+    /// List memories with filters, ordered by (pinned desc, access_count desc, created_at desc).
+    /// Tags and CategoryPath are populated for each returned memory.
+    /// </summary>
+    public (List<Memory> Memories, int TotalCount) ListMemories(
+        List<string>? categoryIds = null,
+        List<string>? tagNames = null,
+        List<MemoryType>? types = null,
+        bool includeArchived = false,
+        int limit = 1000)
+    {
+        var conditions = new List<string>();
+        using var countCmd = _db.CreateCommand("");
+        using var listCmd = _db.CreateCommand("");
+
+        void AddParam(string name, object value)
+        {
+            countCmd.Parameters.AddWithValue(name, value);
+            listCmd.Parameters.AddWithValue(name, value);
+        }
+
+        if (!includeArchived)
+            conditions.Add("m.is_archived = 0");
+
+        if (categoryIds != null && categoryIds.Count > 0)
+        {
+            var placeholders = string.Join(",", categoryIds.Select((_, i) => $"@cat{i}"));
+            conditions.Add($"m.category_id IN ({placeholders})");
+            for (int i = 0; i < categoryIds.Count; i++)
+                AddParam($"@cat{i}", categoryIds[i]);
+        }
+
+        if (types != null && types.Count > 0)
+        {
+            var placeholders = string.Join(",", types.Select((_, i) => $"@type{i}"));
+            conditions.Add($"m.type IN ({placeholders})");
+            for (int i = 0; i < types.Count; i++)
+                AddParam($"@type{i}", types[i].ToString().ToLowerInvariant());
+        }
+
+        if (tagNames != null && tagNames.Count > 0)
+        {
+            var placeholders = string.Join(",", tagNames.Select((_, i) => $"@tag{i}"));
+            conditions.Add($"m.id IN (SELECT mt.memory_id FROM memory_tags mt JOIN tags t ON t.id = mt.tag_id WHERE t.name IN ({placeholders}))");
+            for (int i = 0; i < tagNames.Count; i++)
+                AddParam($"@tag{i}", tagNames[i].ToLowerInvariant());
+        }
+
+        var whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+
+        countCmd.CommandText = $"SELECT COUNT(*) FROM memories m {whereClause}";
+        var totalCount = Convert.ToInt32(countCmd.ExecuteScalar());
+
+        listCmd.CommandText = $"""
+            SELECT m.* FROM memories m
+            {whereClause}
+            ORDER BY m.is_pinned DESC, m.access_count DESC, m.created_at DESC
+            LIMIT {limit}
+            """;
+
+        var memories = new List<Memory>();
+        using var reader = listCmd.ExecuteReader();
+        while (reader.Read())
+        {
+            memories.Add(ReadMemory(reader));
+        }
+
+        // Populate tags + category paths (batch-friendly would be nicer, but this is bounded by limit)
+        foreach (var memory in memories)
+        {
+            memory.Tags = GetTagsForMemory(memory.Id);
+            memory.CategoryPath = memory.CategoryId != null ? GetCategoryPath(memory.CategoryId) : null;
+        }
+
+        return (memories, totalCount);
+    }
+
+    /// <summary>
+    /// Get all memory_links rows whose source and target are both in the provided ID set.
+    /// Returns raw link_type strings (the DB schema is string-valued; the MemoryLink.LinkType
+    /// enum is only used in a subset of call-sites).
+    /// </summary>
+    public List<(string SourceId, string TargetId, string LinkType)> GetLinksWithin(HashSet<string> memoryIds)
+    {
+        if (memoryIds.Count == 0) return [];
+
+        using var cmd = _db.CreateCommand("SELECT source_id, target_id, link_type FROM memory_links");
+        var links = new List<(string, string, string)>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var source = reader.GetString(0);
+            var target = reader.GetString(1);
+            if (memoryIds.Contains(source) && memoryIds.Contains(target))
+            {
+                links.Add((source, target, reader.GetString(2)));
+            }
+        }
+        return links;
+    }
+
+    /// <summary>
+    /// Get (memory_id, tag_name) pairs for the given memory IDs — used for building
+    /// tag-overlap edges in the graph.
+    /// </summary>
+    public List<(string MemoryId, string TagName)> GetTagAssignmentsFor(HashSet<string> memoryIds)
+    {
+        if (memoryIds.Count == 0) return [];
+
+        var placeholders = string.Join(",", memoryIds.Select((_, i) => $"@id{i}"));
+        using var cmd = _db.CreateCommand($"""
+            SELECT mt.memory_id, t.name
+            FROM memory_tags mt
+            JOIN tags t ON t.id = mt.tag_id
+            WHERE mt.memory_id IN ({placeholders})
+            """);
+        var ids = memoryIds.ToList();
+        for (int i = 0; i < ids.Count; i++)
+            cmd.Parameters.AddWithValue($"@id{i}", ids[i]);
+
+        var pairs = new List<(string, string)>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            pairs.Add((reader.GetString(0), reader.GetString(1)));
+        return pairs;
+    }
+
     // ── Chunks ───────────────────────────────────────────────────────
 
     public List<Chunk> GetChunks(string memoryId, int? fromIndex = null, int? toIndex = null)

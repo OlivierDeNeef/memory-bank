@@ -1,0 +1,27 @@
+services:
+  deepmind:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "6868:6868"
+    volumes:
+      - deepmind-data:/data/deepmind
+    restart: unless-stopped
+
+  deepmind-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "5174:5174"
+    volumes:
+      # Share the DB file with the MCP server. SQLite + WAL handles concurrent readers;
+      # writes from the web app are not expected since the viewer is read-only.
+      - deepmind-data:/data/deepmind
+    restart: unless-stopped
+    depends_on:
+      - deepmind
+
+volumes:
+  deepmind-data:

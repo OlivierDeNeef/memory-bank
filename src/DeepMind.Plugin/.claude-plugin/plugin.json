@@ -14,5 +14,18 @@
     "semantic-search",
     "second-mind"
   ],
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__deepmind__*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-direct-mcp.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

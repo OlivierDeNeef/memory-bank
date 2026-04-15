@@ -28,7 +28,7 @@ public class RememberTool
         _config = config;
     }
 
-    [McpServerTool(Name = "remember"), Description("Store a new memory with content, category, tags, priority, and type. Returns the memory ID and chunk count.")]
+    [McpServerTool(Name = "remember"), Description("IMPORTANT: Do NOT call this tool directly. Use the deepmind:remember skill instead, which handles classification, duplicate detection, chunk enrichment, and subagent delegation. --- Store a new memory with content, category, tags, priority, and type. Returns the memory ID and chunk count.")]
     public string Remember(
         [Description("The content to remember (1-100000 chars)")] string content,
         [Description("Category path, e.g. 'projects/backend' (auto-created)")] string? category = null,

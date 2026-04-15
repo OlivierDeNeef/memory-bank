@@ -103,7 +103,7 @@ public class HybridSearchEngine
     {
         if (!_embeddings.IsAvailable) return [];
 
-        var queryEmbedding = _embeddings.GenerateEmbedding(content);
+        var queryEmbedding = _embeddings.GenerateEmbedding(content, isQuery: true);
         if (queryEmbedding == null) return [];
 
         var allEmbeddings = _store.GetAllEmbeddings();
@@ -301,7 +301,7 @@ public class HybridSearchEngine
     {
         if (string.IsNullOrWhiteSpace(request.Query)) return new();
 
-        var queryEmbedding = _embeddings.GenerateEmbedding(request.Query);
+        var queryEmbedding = _embeddings.GenerateEmbedding(request.Query, isQuery: true);
         if (queryEmbedding == null) return new();
 
         var allEmbeddings = _store.GetAllEmbeddings();

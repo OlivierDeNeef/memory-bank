@@ -34,9 +34,9 @@ public class EmbeddingConfig
 {
     public string ModelPath { get; set; } = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".deepmind", "models", "all-MiniLM-L6-v2.onnx");
-    public string ModelName { get; set; } = "all-MiniLM-L6-v2";
-    public int Dimensions { get; set; } = 384;
+        ".deepmind", "models", "nomic-embed-text-v1.5.onnx");
+    public string ModelName { get; set; } = "nomic-embed-text-v1.5";
+    public int Dimensions { get; set; } = 768;
     public int MaxTokensPerChunk { get; set; } = 400;
     public int ChunkOverlapTokens { get; set; } = 50;
 }

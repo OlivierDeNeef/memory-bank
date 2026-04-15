@@ -1,0 +1,53 @@
+# ── Stage 1: build the SPA ──────────────────────────────────────────────
+FROM node:20-alpine AS spa
+WORKDIR /spa
+
+# Copy manifest first for cacheable dep install
+COPY src/DeepMind.Web/ClientApp/package.json src/DeepMind.Web/ClientApp/package-lock.json* ./
+RUN npm ci
+
+COPY src/DeepMind.Web/ClientApp/ ./
+RUN npm run build
+
+# ── Stage 2: build the .NET backend ─────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY Directory.Build.props .
+COPY src/DeepMind.Core/DeepMind.Core.csproj src/DeepMind.Core/
+COPY src/DeepMind.Web/DeepMind.Web.csproj src/DeepMind.Web/
+RUN dotnet restore src/DeepMind.Web/DeepMind.Web.csproj
+
+COPY src/DeepMind.Core/ src/DeepMind.Core/
+COPY src/DeepMind.Web/ src/DeepMind.Web/
+
+# Drop the pre-built SPA into wwwroot; MSBuild will pick it up via
+# IncludePrebuiltClientApp when SkipClientAppBuild=true is set.
+COPY --from=spa /spa/dist/ src/DeepMind.Web/wwwroot/
+
+RUN dotnet publish src/DeepMind.Web/DeepMind.Web.csproj \
+    -c Release -o /app/publish \
+    /p:SkipClientAppBuild=true
+
+# ── Stage 3: runtime ────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data/deepmind
+
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_URLS=http://0.0.0.0:5174
+ENV DeepMind__Database__Path=/data/deepmind/deepmind.db
+ENV DeepMind__Backup__Path=/data/deepmind/backups
+ENV DeepMind__Logging__FilePath=/data/deepmind/logs/deepmind.log
+
+EXPOSE 5174
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:5174/api/filters || exit 1
+
+ENTRYPOINT ["dotnet", "DeepMind.Web.dll"]

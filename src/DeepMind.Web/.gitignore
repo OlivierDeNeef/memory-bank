@@ -1,0 +1,12 @@
+ClientApp/node_modules/
+ClientApp/dist/
+wwwroot/
+
+# TypeScript build artifacts — tsc may emit .js files alongside .ts sources if
+# noEmit isn't enforced. Belt-and-suspenders: ignore them in the SPA source tree.
+ClientApp/src/**/*.js
+ClientApp/src/**/*.js.map
+
+# TypeScript incremental build cache
+ClientApp/*.tsbuildinfo
+ClientApp/tsconfig.tsbuildinfo

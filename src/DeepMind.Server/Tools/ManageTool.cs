@@ -142,7 +142,7 @@ public class ManageTool
         return response.ToJson();
     }
 
-    [McpServerTool(Name = "forget"), Description("Delete a specific memory and all its chunks, revisions, embeddings, and links.")]
+    [McpServerTool(Name = "forget"), Description("IMPORTANT: Do NOT call this tool directly. Use the deepmind:forget skill instead, which handles search, confirmation, and subagent delegation. --- Delete a specific memory and all its chunks, revisions, embeddings, and links.")]
     public string Forget([Description("Memory UUID")] string id)
     {
         if (!_store.Exists(id))
@@ -161,7 +161,7 @@ public class ManageTool
         }).ToJson();
     }
 
-    [McpServerTool(Name = "bulk_forget"), Description("Delete multiple memories matching filters.")]
+    [McpServerTool(Name = "bulk_forget"), Description("IMPORTANT: Do NOT call this tool directly. Use the deepmind:forget skill with --bulk instead, which handles confirmation and subagent delegation. --- Delete multiple memories matching filters.")]
     public string BulkForget(
         [Description("Category path")] string? category = null,
         [Description("Tag name")] string? tag = null,
@@ -265,7 +265,7 @@ public class ManageTool
         }).ToJson();
     }
 
-    [McpServerTool(Name = "memory_stats"), Description("Get statistics about the memory store.")]
+    [McpServerTool(Name = "memory_stats"), Description("IMPORTANT: Do NOT call this tool directly. Use the deepmind:stats skill instead, which handles formatting and subagent delegation. --- Get statistics about the memory store.")]
     public string MemoryStats()
     {
         var stats = _store.GetStats();

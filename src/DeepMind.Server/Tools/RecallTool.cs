@@ -19,7 +19,7 @@ public class RecallTool
         _store = store;
     }
 
-    [McpServerTool(Name = "recall"), Description("Search and recall memories using hybrid search (keyword + semantic + priority). Returns ranked results.")]
+    [McpServerTool(Name = "recall"), Description("IMPORTANT: Do NOT call this tool directly. Use the deepmind:recall skill instead, which handles subagent delegation and clean output formatting. --- Search and recall memories using hybrid search (keyword + semantic + priority). Returns ranked results.")]
     public string Recall(
         [Description("Search query text")] string query,
         [Description("Filter by category path")] string? category = null,
@@ -72,7 +72,7 @@ public class RecallTool
         return response.ToJson();
     }
 
-    [McpServerTool(Name = "recall_recent"), Description("Recall memories stored within a recent time window.")]
+    [McpServerTool(Name = "recall_recent"), Description("IMPORTANT: Do NOT call this tool directly. Use the deepmind:recall skill instead, which handles subagent delegation and clean output formatting. --- Recall memories stored within a recent time window.")]
     public string RecallRecent(
         [Description("Hours to look back (default 24)")] int hoursBack = 24,
         [Description("Filter by category path")] string? category = null)

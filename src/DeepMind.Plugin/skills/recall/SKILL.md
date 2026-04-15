@@ -1,5 +1,5 @@
 ---
-name: deepmind:recall
+name: recall
 description: Search and recall memories from DeepMind using hybrid semantic + keyword search. Use when looking up stored knowledge.
 user-invocable: true
 argument-hint: "<query> [--category <path>] [--tags <t1,t2>] [--type <fact|decision|procedure|reference|observation>] [--limit <n>]"
@@ -11,13 +11,13 @@ Search your second mind for stored knowledge using hybrid search (semantic + key
 
 ## When Invoked
 
-1. **`/deepmind:recall <query>`** — Search for memories matching the query
-2. **`/deepmind:recall` (no args)** — Show recent memories (last 24h)
+1. **`/recall <query>`** — Search for memories matching the query
+2. **`/recall` (no args)** — Show recent memories (last 24h)
 3. **AI auto-invokes** — When user asks "what do we know about...", "recall...", "remember..."
 
 ## Process
 
-### Step 1: Parse Arguments
+### Step 1: Parse Arguments (main agent)
 
 Extract from user input:
 - **query** — The search text (required unless showing recent)
@@ -27,39 +27,52 @@ Extract from user input:
 - **--limit** — Max results (default: 10)
 - **--priority** — Minimum priority (1-5)
 
-### Step 2: Execute Search
+### Step 2: Spawn a subagent (main agent) ! important !
 
-If query provided, use `mcp__deepmind__recall`:
+Use the **Agent tool** to spawn a single subagent. Pass it a prompt containing the parsed arguments and the instructions below. Do NOT call any `mcp__deepmind__*` tools yourself.
 
-```
-mcp__deepmind__recall(
-  query: "<search text>",
-  category: "<if specified>",
-  tags: "<if specified>",
-  type: "<if specified>",
-  limit: <number>,
-  minPriority: <if specified>
-)
-```
+**Subagent prompt must include:**
+- The parsed query and all filters from Step 1
+- The subagent instructions from Step 3
 
-If no query, use `mcp__deepmind__recall_recent`:
+### Step 3: Subagent instructions
 
-```
-mcp__deepmind__recall_recent(hoursBack: 24)
-```
+> These instructions are for the subagent, include them in the Agent tool prompt.
 
-### Step 3: Present Results
+**Search:** If query was provided, call `mcp__deepmind__recall` with the query and any filters. If no query, call `mcp__deepmind__recall_recent(hoursBack: 24)`.
 
-For each result, display:
-- **Summary** or first line of content
-- **Category** and **tags**
-- **Type** and **priority**
-- **Score** (if from search)
-- **Created/updated** dates
+**Fetch chunks:** If any result has `chunkCount > 1`, call `mcp__deepmind__get_memory` or `mcp__deepmind__get_chunks` to get the full content. Do this automatically without asking.
 
-If a result is chunked, mention it and offer to fetch full content with `mcp__deepmind__get_memory` or `mcp__deepmind__get_chunks`.
+**Return the results** as structured text the main agent can present. For each result include: summary/title, category, tags, type, priority, similarity score as percentage, revision number, last updated date, and the full reconstructed content (merged from all chunks seamlessly). Exclude: memory UUIDs, chunk indices, chunk overlap metadata, embedding vectors, raw JSON.
 
-### Step 4: Follow-up
+### Step 4: Present results (main agent)
+
+Take the subagent's response and present it cleanly to the user. Do NOT echo raw subagent output — format it.
+
+**For a single result:**
+
+> **<Title/Summary>**
+> **Category:** <category> · **Tags:** <tag1>, <tag2>
+> **Type:** <type> · **Priority:** <priority label>
+> **Confidence:** <score as %>
+>
+> <Full content — seamlessly merged, no chunk boundaries>
+>
+> *Revision <n> · Last updated <date>*
+
+**For multiple results:**
+
+> 1. **<Title>** — <first line or summary preview>
+>    <category> · <tags> · <confidence %>
+>    *Revision <n> · <date>*
+>
+> 2. **<Title>** — <first line or summary preview>
+>    <category> · <tags> · <confidence %>
+>    *Revision <n> · <date>*
+
+**Never show:** memory UUIDs, chunk indices, chunk overlap, raw similarity scores (convert to %), embedding vectors, MCP tool names, JSON structures.
+
+### Step 5: Follow-up
 
 If results seem insufficient, suggest:
 - Broadening the query

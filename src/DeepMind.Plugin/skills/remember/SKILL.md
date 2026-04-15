@@ -1,8 +1,9 @@
 ---
-name: deepmind:remember
+name: remember
 description: Store new knowledge in DeepMind. Use when the user wants to save facts, decisions, procedures, or references.
 user-invocable: true
 argument-hint: "<content> [--category <path>] [--tags <t1,t2>] [--type <fact|decision|procedure|reference|observation>] [--priority <1-5>]"
+
 ---
 
 # DeepMind Remember
@@ -11,13 +12,13 @@ Store knowledge in your second mind for future recall.
 
 ## When Invoked
 
-1. **`/deepmind:remember <content>`** — Store the provided content
-2. **`/deepmind:remember` (no args)** — Prompt user for what to store, or extract from conversation context
+1. **`/remember <content>`** — Store the provided content
+2. **`/remember` (no args)** — Prompt user for what to store, or extract from conversation context
 3. **AI auto-invokes** — When user says "remember this", "save that", "store this for later"
 
 ## Process
 
-### Step 1: Determine Content
+### Step 1: Determine Content (main agent)
 
 If content provided as argument, use it directly.
 
@@ -29,7 +30,7 @@ If no content, analyze the current conversation for:
 
 Ask the user to confirm what should be stored.
 
-### Step 2: Classify the Memory
+### Step 2: Classify the Memory (main agent)
 
 Determine or ask:
 - **type** — `fact` (default), `decision`, `procedure`, `reference`, `observation`
@@ -37,7 +38,7 @@ Determine or ask:
 - **priority** — 1 (trivial) to 5 (critical), default 3
 - **tags** — Extract keywords from content
 
-### Step 3: Write a Search-Optimized Summary
+### Step 3: Write a Search-Optimized Summary (main agent)
 
 **CRITICAL:** The `summary` field is the most important field for search recall. Write it as a keyword-rich, search-optimized string — NOT a prose description.
 
@@ -53,54 +54,43 @@ Include in the summary:
 **Bad summary example:**
 > Frituur 't Spieken Lebbeke website project overview
 
-### Step 4: Check for Duplicates
+### Step 4: Spawn a subagent (main agent)  ! important !
 
-Before storing, search for similar content:
+Use the **Agent tool** to spawn a single subagent. Pass it a prompt containing the content, summary, classification, and the instructions below. Do NOT call any `mcp__deepmind__*` tools yourself.
 
-```
-mcp__deepmind__recall(query: "<summary of content>", limit: 3)
-```
+**Subagent prompt must include:**
+- The full content to store
+- The search-optimized summary from Step 3
+- The classification (type, category, priority, tags)
+- The subagent instructions from Step 5
 
-If a similar memory exists (high similarity score), ask the user:
-- **Update** the existing memory? → `mcp__deepmind__update_memory`
-- **Store as new** anyway? → proceed
-- **Link** to existing? → store + `mcp__deepmind__link_memories`
+### Step 5: Subagent instructions
 
-### Step 5: Store
+> These instructions are for the subagent, include them in the Agent tool prompt.
 
-```
-mcp__deepmind__remember(
-  content: "<full content>",
-  summary: "<search-optimized summary from Step 3>",
-  category: "<category path>",
-  tags: "tag1,tag2,tag3",
-  type: "<type>",
-  priority: <1-5>,
-  source: "conversation"
-)
-```
+**Check for duplicates:** Call `mcp__deepmind__recall(query: "<summary>", limit: 3)`. If a very similar memory exists (high similarity score), return that information so the main agent can ask the user whether to update or store as new.
 
-### Step 6: Enrich Chunks (if chunked)
+**Store the memory:** Call `mcp__deepmind__remember` with all the fields: content, summary, category, tags, type, priority, source: "conversation".
 
-If the response shows `chunkCount > 1` and includes `chunkPreviews`, you MUST call `enrich_chunks` to improve per-chunk searchability.
+**Enrich chunks:** If the response shows `chunkCount > 1` and includes `chunkPreviews`, call `mcp__deepmind__enrich_chunks`. For each chunk, write a summary (1-2 sentences with specific values and searchable terms) and keywords (comma-separated, chunk-specific).
 
-For each chunk preview, write:
-- **summary**: A 1-2 sentence description of what that specific chunk covers. Include all specific values, names, limits, and searchable terms from that chunk.
-- **keywords**: Comma-separated search terms specific to that chunk's content (not just the parent tags — add chunk-specific terms).
+**Return:** The stored memory's title/summary, category, tags, type, priority, chunk count, revision number, date, and whether a duplicate was detected (with the duplicate's title if so). Exclude: memory UUID, raw chunk previews, embedding details, raw JSON.
 
-```
-mcp__deepmind__enrich_chunks(
-  memoryId: "<id from step 5>",
-  enrichments: "[{\"chunkIndex\": 0, \"summary\": \"...\", \"keywords\": \"...\"}, ...]"
-)
-```
+### Step 6: Present result (main agent)
 
-### Step 7: Confirm
+Take the subagent's response and present it cleanly:
 
-Report back:
-- Memory ID
-- Summary applied
-- Category and tags applied
-- Chunk count (if large content was split)
-- Whether chunks were enriched
-- Duplicate warning (if any)
+> **Memory saved**
+>
+> **Title:** <summary, shortened to a readable title>
+> **Category:** <category>
+> **Tags:** <tag1>, <tag2>, <tag3>
+> **Type:** <type> · **Priority:** <priority as label: Trivial/Low/Normal/High/Critical>
+>
+> <content preview — first ~3 lines or a concise summary>
+>
+> *<chunk count> chunks · Revision 1 · Saved <date>*
+
+If a duplicate was detected, mention it briefly: *"Similar to existing memory: <title>"*
+
+Do NOT show: memory UUID, raw chunk previews, embedding details, or MCP tool call names.

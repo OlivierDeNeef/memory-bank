@@ -12,6 +12,7 @@ public class OnnxEmbeddingService : IDisposable
     private BertTokenizer? _tokenizer;
     private readonly ILogger<OnnxEmbeddingService> _logger;
     private readonly EmbeddingConfig _config;
+    private bool _modelAcceptsTokenTypeIds;
 
     public bool IsAvailable => _session != null;
     public int Dimensions => _config.Dimensions;
@@ -46,6 +47,7 @@ public class OnnxEmbeddingService : IDisposable
             try
             {
                 _session = new InferenceSession(modelPath);
+                _modelAcceptsTokenTypeIds = _session.InputMetadata.ContainsKey("token_type_ids");
                 _logger.LogInformation("Embedding model loaded: {ModelName} ({Dimensions}d) from {ModelPath}",
                     config.ModelName, config.Dimensions, modelPath);
             }
@@ -60,31 +62,39 @@ public class OnnxEmbeddingService : IDisposable
         }
     }
 
-    public float[]? GenerateEmbedding(string text)
+    public float[]? GenerateEmbedding(string text, bool isQuery = false)
     {
         if (_session == null) return null;
 
         try
         {
-            var (inputIds, attentionMask) = Tokenize(text);
+            // Add task prefix for models that support it (e.g. Nomic Embed)
+            var prefixedText = isQuery
+                ? $"search_query: {text}"
+                : $"search_document: {text}";
+
+            var (inputIds, attentionMask) = Tokenize(prefixedText);
 
             var idsTensor = new DenseTensor<long>(new[] { 1, inputIds.Length });
             var maskTensor = new DenseTensor<long>(new[] { 1, inputIds.Length });
-            var typeTensor = new DenseTensor<long>(new[] { 1, inputIds.Length });
 
             for (int i = 0; i < inputIds.Length; i++)
             {
                 idsTensor[0, i] = inputIds[i];
                 maskTensor[0, i] = attentionMask[i];
-                typeTensor[0, i] = 0;
             }
 
             var inputs = new List<NamedOnnxValue>
             {
                 NamedOnnxValue.CreateFromTensor("input_ids", idsTensor),
-                NamedOnnxValue.CreateFromTensor("attention_mask", maskTensor),
-                NamedOnnxValue.CreateFromTensor("token_type_ids", typeTensor)
+                NamedOnnxValue.CreateFromTensor("attention_mask", maskTensor)
             };
+
+            if (_modelAcceptsTokenTypeIds)
+            {
+                var typeTensor = new DenseTensor<long>(new[] { 1, inputIds.Length });
+                inputs.Add(NamedOnnxValue.CreateFromTensor("token_type_ids", typeTensor));
+            }
 
             using var results = _session.Run(inputs);
             var output = results.First().AsTensor<float>();

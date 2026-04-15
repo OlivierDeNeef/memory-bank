@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/publish/
+**/node_modules/
+**/dist/
+**/wwwroot/
+tests/
+stories/
+.git/
+.claude/
+*.md
