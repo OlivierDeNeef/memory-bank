@@ -12,7 +12,7 @@ dependencies: []
 
 ## Problem Statement
 
-Create DeepMind.sln, DeepMind.Server, DeepMind.Core, and DeepMind.Tests projects with proper references and NuGet packages
+Create MemoryBank.sln, MemoryBank.Server, MemoryBank.Core, and MemoryBank.Tests projects with proper references and NuGet packages
 
 ## Acceptance Criteria
 

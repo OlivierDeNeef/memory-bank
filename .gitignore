@@ -5,7 +5,7 @@ obj/
 *.suo
 *.db
 *.log
-.deepmind/
+.memorybank/
 
 # Large model files - download separately or use Git LFS
 *.onnx

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MemoryBank.Core/MemoryBank.Core.csproj" />
+    <Project Path="src/MemoryBank.Server/MemoryBank.Server.csproj" />
+    <Project Path="src/MemoryBank.Web/MemoryBank.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MemoryBank.Tests/MemoryBank.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,13 +1,13 @@
-# DeepMind — Application Specification
+# MemoryBank — Application Specification
 
 > A persistent, searchable memory system exposed as an MCP server.
-> DeepMind acts as a "second mind" — an external knowledge store that any AI client can use to remember, recall, and manage information across sessions.
+> MemoryBank acts as a "second mind" — an external knowledge store that any AI client can use to remember, recall, and manage information across sessions.
 
 ## Core Principle
 
-> **DeepMind is a memory, not a brain.** The brain is whatever AI is talking to it.
+> **MemoryBank is a memory, not a brain.** The brain is whatever AI is talking to it.
 
-DeepMind contains no AI inference. It is a fast, reliable, well-indexed store. The calling AI (Claude, Copilot, Cursor, etc.) handles all reasoning, summarization, and decision-making. DeepMind stores and retrieves.
+MemoryBank contains no AI inference. It is a fast, reliable, well-indexed store. The calling AI (Claude, Copilot, Cursor, etc.) handles all reasoning, summarization, and decision-making. MemoryBank stores and retrieves.
 
 ---
 
@@ -17,7 +17,7 @@ DeepMind contains no AI inference. It is a fast, reliable, well-indexed store. T
 AI Client (Claude Code, Cursor, Copilot, etc.)
     | MCP Protocol (stdio transport)
     v
-DeepMind MCP Server (C# / .NET)
+MemoryBank MCP Server (C# / .NET)
     |
     v
 SQLite (single local file)
@@ -38,9 +38,9 @@ SQLite (single local file)
 ```json
 {
   "mcpServers": {
-    "deepmind": {
+    "memorybank": {
       "command": "dotnet",
-      "args": ["run", "--project", "C:/path/to/DeepMind.Server"]
+      "args": ["run", "--project", "C:/path/to/MemoryBank.Server"]
     }
   }
 }
@@ -80,10 +80,10 @@ SQLite (single local file)
 ## 3. Project Structure
 
 ```
-DeepMind/
-├── DeepMind.sln
+MemoryBank/
+├── MemoryBank.sln
 ├── src/
-│   ├── DeepMind.Server/           -- MCP server entry point
+│   ├── MemoryBank.Server/           -- MCP server entry point
 │   │   ├── Program.cs
 │   │   ├── Tools/
 │   │   │   ├── RememberTool.cs
@@ -91,8 +91,8 @@ DeepMind/
 │   │   │   ├── ForgetTool.cs
 │   │   │   ├── ManageTool.cs
 │   │   │   └── CategoryTool.cs
-│   │   └── DeepMind.Server.csproj
-│   └── DeepMind.Core/             -- Models, storage, search
+│   │   └── MemoryBank.Server.csproj
+│   └── MemoryBank.Core/             -- Models, storage, search
 │       ├── Models/
 │       │   ├── Memory.cs
 │       │   ├── Chunk.cs
@@ -101,7 +101,7 @@ DeepMind/
 │       │   ├── Revision.cs
 │       │   └── MemoryLink.cs
 │       ├── Storage/
-│       │   ├── DeepMindDb.cs
+│       │   ├── MemoryBankDb.cs
 │       │   └── Migrations/
 │       ├── Search/
 │       │   ├── HybridSearchEngine.cs
@@ -109,9 +109,9 @@ DeepMind/
 │       │   └── KeywordSearch.cs
 │       ├── Embeddings/
 │       │   └── OnnxEmbeddingService.cs
-│       └── DeepMind.Core.csproj
+│       └── MemoryBank.Core.csproj
 └── tests/
-    └── DeepMind.Tests/
+    └── MemoryBank.Tests/
 ```
 
 ---
@@ -191,7 +191,7 @@ Current content is always top-level on the memory for fast read. Revisions are s
 
 ### 4.5 Chunked Storage for Large Content
 
-When storing large content (e.g., an entire conversation), DeepMind automatically splits it into searchable chunks while preserving the full original:
+When storing large content (e.g., an entire conversation), MemoryBank automatically splits it into searchable chunks while preserving the full original:
 
 ```
 Parent memory (full content stored, not indexed)
@@ -399,7 +399,7 @@ Large memory — returns matching chunk with pointer to full document:
   "id": "...",
   "matchedChunk": "We chose SQLite over LiteDB because...",
   "chunkIndex": 12,
-  "parentSummary": "DeepMind app design session - April 2026",
+  "parentSummary": "MemoryBank app design session - April 2026",
   "totalChunks": 15,
   "hint": "Call get_memory or get_chunks for full context"
 }
@@ -473,7 +473,7 @@ Loaded once per AI session, not on every call:
 
 | Resource URI | Content |
 |--------------|---------|
-| `deepmind://index` | Categories with counts, top tags, memory types, total stats, recent activity |
+| `memorybank://index` | Categories with counts, top tags, memory types, total stats, recent activity |
 
 ### 7.3 Resource Subscriptions
 
@@ -686,9 +686,9 @@ SQLite is proven to handle this scale. FTS5 and sqlite-vec are designed for effi
 
 > **User:** Save this entire conversation as a memory.
 >
-> **AI calls:** `remember(content: "...entire conversation text...", category: "sessions/design", tags: ["deepmind", "architecture"], type: "reference", summary: "DeepMind app design session - MCP server, features, storage decisions")`
+> **AI calls:** `remember(content: "...entire conversation text...", category: "sessions/design", tags: ["memorybank", "architecture"], type: "reference", summary: "MemoryBank app design session - MCP server, features, storage decisions")`
 >
-> DeepMind auto-chunks the content, embeds each chunk, and stores the full original for retrieval.
+> MemoryBank auto-chunks the content, embeds each chunk, and stores the full original for retrieval.
 
 ---
 
@@ -873,11 +873,11 @@ All successful tool responses follow this structure:
         "matchedChunk": "We chose SQLite over LiteDB because of scalability concerns...",
         "chunkIndex": 12,
         "totalChunks": 15,
-        "parentSummary": "DeepMind app design session - April 2026",
+        "parentSummary": "MemoryBank app design session - April 2026",
         "category": "sessions/design",
         "type": "reference",
         "priority": 3,
-        "tags": ["deepmind", "architecture"],
+        "tags": ["memorybank", "architecture"],
         "score": 0.88,
         "isChunked": true,
         "freshness": "fresh",
@@ -995,7 +995,7 @@ All successful tool responses follow this structure:
   "data": {
     "status": "healthy",
     "dbFileSize": "45.2 MB",
-    "dbFilePath": "C:/Users/user/.deepmind/deepmind.db",
+    "dbFilePath": "C:/Users/user/.memorybank/memorybank.db",
     "totalMemories": 2847,
     "totalChunks": 4102,
     "totalRevisions": 8934,
@@ -1073,25 +1073,25 @@ All successful tool responses follow this structure:
 
 ### 14.1 Configuration File
 
-Location: `~/.deepmind/appsettings.json`
+Location: `~/.memorybank/appsettings.json`
 
 Created with defaults on first run if not present.
 
 ```json
 {
   "database": {
-    "path": "~/.deepmind/deepmind.db",
+    "path": "~/.memorybank/memorybank.db",
     "walMode": true,
     "busyTimeout": 5000
   },
   "backup": {
-    "path": "~/.deepmind/backups/",
+    "path": "~/.memorybank/backups/",
     "maxBackups": 10,
     "autoBackupEnabled": true,
     "autoBackupIntervalHours": 24
   },
   "embedding": {
-    "modelPath": "~/.deepmind/models/all-MiniLM-L6-v2.onnx",
+    "modelPath": "~/.memorybank/models/all-MiniLM-L6-v2.onnx",
     "modelName": "all-MiniLM-L6-v2",
     "dimensions": 384,
     "maxTokensPerChunk": 400,
@@ -1122,7 +1122,7 @@ Created with defaults on first run if not present.
   },
   "logging": {
     "level": "Information",
-    "filePath": "~/.deepmind/logs/deepmind.log",
+    "filePath": "~/.memorybank/logs/memorybank.log",
     "maxFileSizeMb": 50,
     "maxRetainedFiles": 5
   }
@@ -1139,8 +1139,8 @@ Created with defaults on first run if not present.
 Any config value can be overridden via environment variable:
 
 ```
-DEEPMIND__DATABASE__PATH=C:/custom/path/deepmind.db
-DEEPMIND__SEARCH__VECTORWEIGHT=0.5
+MEMORYBANK__DATABASE__PATH=C:/custom/path/memorybank.db
+MEMORYBANK__SEARCH__VECTORWEIGHT=0.5
 ```
 
 Follows the `Microsoft.Extensions.Configuration` double-underscore convention.
@@ -1151,15 +1151,15 @@ Follows the `Microsoft.Extensions.Configuration` double-underscore convention.
 
 ### 15.1 First Run
 
-On first launch, DeepMind:
+On first launch, MemoryBank:
 
-1. Creates `~/.deepmind/` directory if not exists
+1. Creates `~/.memorybank/` directory if not exists
 2. Creates `appsettings.json` with defaults if not exists
 3. Creates SQLite database file and runs all schema migrations
 4. Creates FTS5 virtual tables and triggers
 5. Checks for ONNX embedding model at configured path
    - If not found: logs a warning, starts without embedding support. Vector search is disabled. Keyword search and structured filters still work.
-   - Provides a clear error message: `"Embedding model not found at ~/.deepmind/models/all-MiniLM-L6-v2.onnx. Download it from [URL] and place it there. Vector search is disabled until the model is available."`
+   - Provides a clear error message: `"Embedding model not found at ~/.memorybank/models/all-MiniLM-L6-v2.onnx. Download it from [URL] and place it there. Vector search is disabled until the model is available."`
 6. Creates `backups/` and `logs/` directories
 7. Writes startup log entry
 8. Server is ready — sends MCP initialization response
@@ -1186,7 +1186,7 @@ On receiving termination signal (parent process closes stdin, SIGTERM, etc.):
 
 ### 15.4 Crash Recovery
 
-If DeepMind was not shut down cleanly:
+If MemoryBank was not shut down cleanly:
 
 - SQLite WAL mode provides automatic crash recovery — no data loss for committed transactions
 - On next startup, SQLite replays the WAL automatically
@@ -1198,7 +1198,7 @@ If DeepMind was not shut down cleanly:
 
 ### 16.1 Model Location
 
-Models are stored at: `~/.deepmind/models/`
+Models are stored at: `~/.memorybank/models/`
 
 ### 16.2 Supported Models
 
@@ -1210,7 +1210,7 @@ Models are stored at: `~/.deepmind/models/`
 
 ### 16.3 Model Provisioning
 
-DeepMind does **not** auto-download models. The user must download and place the ONNX file manually. This is intentional:
+MemoryBank does **not** auto-download models. The user must download and place the ONNX file manually. This is intentional:
 
 - No network dependency at runtime
 - User controls what runs on their machine
@@ -1223,8 +1223,8 @@ Documentation and first-run message provide download instructions.
 When changing the embedding model (different dimensions or different model):
 
 1. Update `appsettings.json` with new model path, name, and dimensions
-2. Restart DeepMind
-3. DeepMind detects dimension mismatch with existing embeddings
+2. Restart MemoryBank
+3. MemoryBank detects dimension mismatch with existing embeddings
 4. Existing memories remain functional via keyword search
 5. Call `reembed_all` tool to regenerate all embeddings with the new model
 6. Progress is reported: `"Re-embedding: 1500/2847 memories complete"`
@@ -1233,7 +1233,7 @@ When changing the embedding model (different dimensions or different model):
 
 If no ONNX model is available:
 
-- DeepMind starts normally
+- MemoryBank starts normally
 - `remember` stores content, chunks, FTS index — but skips embedding generation
 - `recall` uses keyword search + structured filters only (no vector score)
 - `health_check` reports `"embeddingStatus": "unavailable"`
@@ -1248,18 +1248,18 @@ If no ONNX model is available:
 Distributed as a **.NET tool** (global dotnet tool):
 
 ```bash
-dotnet tool install --global DeepMind
+dotnet tool install --global MemoryBank
 ```
 
-This provides a `deepmind` command available system-wide.
+This provides a `memorybank` command available system-wide.
 
 ### 17.2 MCP Client Configuration (after install)
 
 ```json
 {
   "mcpServers": {
-    "deepmind": {
-      "command": "deepmind",
+    "memorybank": {
+      "command": "memorybank",
       "args": ["serve"]
     }
   }
@@ -1270,19 +1270,19 @@ This provides a `deepmind` command available system-wide.
 
 | Command | Purpose |
 |---------|---------|
-| `deepmind serve` | Start MCP server (stdio mode, used by AI clients) |
-| `deepmind init` | Create config directory and default settings |
-| `deepmind health` | Run health check and print status |
-| `deepmind backup` | Create manual backup |
-| `deepmind restore <path>` | Restore from backup |
-| `deepmind reembed` | Regenerate all embeddings |
-| `deepmind stats` | Print memory stats |
-| `deepmind version` | Print version info |
+| `memorybank serve` | Start MCP server (stdio mode, used by AI clients) |
+| `memorybank init` | Create config directory and default settings |
+| `memorybank health` | Run health check and print status |
+| `memorybank backup` | Create manual backup |
+| `memorybank restore <path>` | Restore from backup |
+| `memorybank reembed` | Regenerate all embeddings |
+| `memorybank stats` | Print memory stats |
+| `memorybank version` | Print version info |
 
 ### 17.4 Updating
 
 ```bash
-dotnet tool update --global DeepMind
+dotnet tool update --global MemoryBank
 ```
 
 Schema migrations run automatically on next startup.
@@ -1290,10 +1290,10 @@ Schema migrations run automatically on next startup.
 ### 17.5 Uninstalling
 
 ```bash
-dotnet tool uninstall --global DeepMind
+dotnet tool uninstall --global MemoryBank
 ```
 
-Data directory (`~/.deepmind/`) is **not** deleted on uninstall. User must remove it manually if desired.
+Data directory (`~/.memorybank/`) is **not** deleted on uninstall. User must remove it manually if desired.
 
 ---
 
@@ -1301,12 +1301,12 @@ Data directory (`~/.deepmind/`) is **not** deleted on uninstall. User must remov
 
 ### 18.1 Backup Location
 
-Default: `~/.deepmind/backups/`
+Default: `~/.memorybank/backups/`
 
 ### 18.2 Backup Naming
 
 ```
-deepmind_backup_2026-04-14T030000Z.db
+memorybank_backup_2026-04-14T030000Z.db
 ```
 
 ISO 8601 timestamp, file-safe format.
@@ -1341,15 +1341,15 @@ ISO 8601 timestamp, file-safe format.
 ### 19.1 Single-Writer Model
 
 - SQLite allows one writer at a time. WAL mode allows concurrent readers while writing.
-- DeepMind is designed for **single-instance** use. One AI client at a time.
+- MemoryBank is designed for **single-instance** use. One AI client at a time.
 
 ### 19.2 Multiple AI Clients
 
-If two AI clients try to launch DeepMind against the same database simultaneously:
+If two AI clients try to launch MemoryBank against the same database simultaneously:
 
 - SQLite `busy_timeout` (default: 5000ms) handles brief contention
 - If the timeout expires, the second writer gets a `DATABASE_BUSY` error
-- The error message instructs the user: `"Another DeepMind instance may be using this database. Close the other AI client or configure a separate database path."`
+- The error message instructs the user: `"Another MemoryBank instance may be using this database. Close the other AI client or configure a separate database path."`
 
 ### 19.3 Rapid Successive Calls
 
@@ -1456,7 +1456,7 @@ Structured JSON logging via `Microsoft.Extensions.Logging`:
 {
   "timestamp": "2026-04-14T10:00:00.123Z",
   "level": "Information",
-  "category": "DeepMind.Server.Tools.RememberTool",
+  "category": "MemoryBank.Server.Tools.RememberTool",
   "message": "Memory stored",
   "properties": {
     "memoryId": "550e8400-...",
@@ -1479,7 +1479,7 @@ Structured JSON logging via `Microsoft.Extensions.Logging`:
 
 ### 22.3 Log Output
 
-- **Primary**: File at `~/.deepmind/logs/deepmind.log`
+- **Primary**: File at `~/.memorybank/logs/memorybank.log`
 - Rolling file: max 50 MB per file, max 5 retained files
 - **Secondary**: stderr (captured by MCP client for diagnostics)
 - stdout is reserved exclusively for MCP protocol communication
@@ -1517,7 +1517,7 @@ CREATE TABLE schema_version (
 
 ### 23.3 Migration Files
 
-Stored as embedded resources in `DeepMind.Core`:
+Stored as embedded resources in `MemoryBank.Core`:
 
 ```
 Migrations/
@@ -1552,7 +1552,7 @@ Each migration contains:
 | `list_tags` | Returns empty array |
 | `memory_stats` | Returns all zeros |
 | `health_check` | Returns `healthy` |
-| `deepmind://index` resource | Returns empty categories, empty tags, totalMemories: 0 |
+| `memorybank://index` resource | Returns empty categories, empty tags, totalMemories: 0 |
 
 ### 24.2 Category Auto-Creation
 
@@ -1596,7 +1596,7 @@ When `remember` is called with tags that don't exist:
 ### 24.8 Embedding Dimension Mismatch
 
 - Detected on startup when configured model dimensions don't match stored embeddings
-- DeepMind starts normally. Existing vector search works with old embeddings.
+- MemoryBank starts normally. Existing vector search works with old embeddings.
 - New memories get embeddings with the new dimensions — but these are incompatible with old ones
 - `health_check` reports the mismatch and recommends `reembed_all`
 - `reembed_all` replaces all embeddings with the new model

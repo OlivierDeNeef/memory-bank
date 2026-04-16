@@ -1,15 +1,15 @@
 services:
-  deepmind:
+  memorybank:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "6868:6868"
     volumes:
-      - deepmind-data:/data/deepmind
+      - memorybank-data:/data/memorybank
     restart: unless-stopped
 
-  deepmind-web:
+  memorybank-web:
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -18,10 +18,10 @@ services:
     volumes:
       # Share the DB file with the MCP server. SQLite + WAL handles concurrent readers;
       # writes from the web app are not expected since the viewer is read-only.
-      - deepmind-data:/data/deepmind
+      - memorybank-data:/data/memorybank
     restart: unless-stopped
     depends_on:
-      - deepmind
+      - memorybank
 
 volumes:
-  deepmind-data:
+  memorybank-data:
