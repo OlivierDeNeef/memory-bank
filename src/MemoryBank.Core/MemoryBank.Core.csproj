@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Embeddings\Models\model.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Embeddings\Models\model.onnx" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Embeddings\Models\model.onnx')" />
     <Content Include="Embeddings\Models\vocab.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

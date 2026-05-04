@@ -233,6 +233,49 @@ public static class Migrations
             CREATE INDEX idx_memories_type ON memories(type);
             CREATE INDEX idx_memories_created ON memories(created_at);
             CREATE INDEX idx_memories_archived ON memories(is_archived);
+            """),
+
+        new(4, "Add OAuth tables: clients, authorization codes, access tokens, refresh tokens", """
+            CREATE TABLE oauth_clients (
+                client_id     TEXT PRIMARY KEY,
+                client_name   TEXT NOT NULL,
+                redirect_uris TEXT NOT NULL,
+                created_at    TEXT NOT NULL
+            );
+
+            CREATE TABLE oauth_refresh_tokens (
+                token      TEXT PRIMARY KEY,
+                client_id  TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+                username   TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE oauth_access_tokens (
+                token         TEXT PRIMARY KEY,
+                client_id     TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+                refresh_token TEXT REFERENCES oauth_refresh_tokens(token) ON DELETE CASCADE,
+                username      TEXT NOT NULL,
+                expires_at    TEXT NOT NULL,
+                created_at    TEXT NOT NULL
+            );
+
+            CREATE TABLE oauth_authorization_codes (
+                code                  TEXT PRIMARY KEY,
+                client_id             TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+                redirect_uri          TEXT NOT NULL,
+                code_challenge        TEXT,
+                code_challenge_method TEXT,
+                username              TEXT NOT NULL,
+                expires_at            TEXT NOT NULL,
+                created_at            TEXT NOT NULL
+            );
+
+            CREATE INDEX idx_oauth_codes_expires   ON oauth_authorization_codes(expires_at);
+            CREATE INDEX idx_oauth_access_expires  ON oauth_access_tokens(expires_at);
+            CREATE INDEX idx_oauth_access_refresh  ON oauth_access_tokens(refresh_token);
+            CREATE INDEX idx_oauth_refresh_expires ON oauth_refresh_tokens(expires_at);
+            CREATE INDEX idx_oauth_refresh_user    ON oauth_refresh_tokens(username);
             """)
     ];
 }
