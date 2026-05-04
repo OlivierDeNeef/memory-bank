@@ -1,10 +1,10 @@
 ---
-id: "009-7c1b"
-title: "Add cookie session and OAuth callback to MemoryBank.Web"
-status: pending
+id: 009-7c1b
+title: Add cookie session and OAuth callback to MemoryBank.Web
+status: complete
 priority: P2
-created: 2026-05-04T21:07:27.940Z
-updated: 2026-05-04T21:07:27.940Z
+created: "2026-05-04T21:07:27.940Z"
+updated: "2026-05-04T21:34:47.211Z"
 dependencies: []
 ---
 
@@ -19,4 +19,6 @@ Add middleware on `MemoryBank.Web` that redirects unauthenticated browsers to th
 - [ ] Implement as described
 
 ## Work Log
+
+### 2026-05-04T21:34:47.010Z - Cookie session + auth gate. AuthMiddleware refreshes silently; /auth/login PKCE; /auth/callback uses shared OAuthStore directly. SPA handles 401 by redirecting. 57 tests pass on commit fadb339
 

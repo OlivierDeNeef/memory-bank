@@ -72,14 +72,26 @@ There are three ways to run MemoryBank. Pick based on what you want to do.
 
 This spins up both the MCP server (HTTP transport on `:6868`) and the graph viewer (`:5174`), sharing a single SQLite database via a named volume.
 
+**Auth is required for HTTP mode.** The MCP server refuses to start without `MEMORYBANK_AUTH_USERNAME` and `MEMORYBANK_AUTH_PASSWORD_HASH`. Generate the hash, then create a `.env`:
+
 ```bash
-# From the repo root
+# Generate a password hash (writes a single line to stdout)
+dotnet run --project src/MemoryBank.Server -- --hash-password 'pick-a-strong-password'
+
+# Copy the template and paste the hash you just generated
+cp .env.example .env
+$EDITOR .env
+```
+
+Then start the stack:
+
+```bash
 docker compose up -d
 ```
 
 Then open:
-- Graph viewer: <http://localhost:5174>
-- MCP server health: <http://localhost:6868/health>
+- Graph viewer: <http://localhost:5174> (browser will prompt you to sign in)
+- MCP server health: <http://localhost:6868/health> (the only endpoint that bypasses auth)
 
 Stop with:
 ```bash
@@ -179,6 +191,106 @@ claude --plugin-dir ./src/MemoryBank.Plugin
 ```
 
 After the reload, `/remember`, `/recall`, `/search`, `/stats`, `/todo`, and `/forget` are available as slash commands. The plugin's PreToolUse hook at `scripts/block-direct-mcp.sh` intercepts any direct `mcp__memorybank__*` calls and nudges Claude to go through the skills instead.
+
+---
+
+## Hosting on a remote server (nginx + shared OAuth)
+
+Run MemoryBank on a server reachable from all your devices, with one login that covers both the MCP server and the graph viewer.
+
+The architecture collapses both services onto a single hostname so cookies and OAuth callbacks share an origin:
+
+```
+https://memory-bank.example.com/
+├── /                       → MemoryBank.Web    (graph viewer SPA + API)
+├── /api/*                  → MemoryBank.Web
+├── /auth/*                 → MemoryBank.Web    (login redirect, callback, logout)
+├── /mcp                    → MemoryBank.Server (MCP protocol)
+├── /oauth/*                → MemoryBank.Server (login form, token endpoint)
+└── /.well-known/*          → MemoryBank.Server (OAuth discovery metadata)
+```
+
+`MemoryBank.Server` is the **authorization server** (renders the login page, issues tokens). `MemoryBank.Web` is a **resource server** (validates tokens against the shared SQLite DB). Both processes run side-by-side on the Docker host; nginx (or Nginx Proxy Manager) does TLS termination and path routing.
+
+### 1. On the server: bring up the stack
+
+```bash
+# Generate a password hash on the server (or any machine with the .NET SDK)
+dotnet run --project src/MemoryBank.Server -- --hash-password 'pick-a-strong-password'
+
+# Create .env with the username + hash you just produced
+cp .env.example .env
+$EDITOR .env
+
+# Start both containers
+docker compose up -d
+```
+
+The MCP server binds `0.0.0.0:6868` and the viewer binds `0.0.0.0:5174` on the host. Make sure your **server firewall blocks those ports from the public internet** — only the local nginx should reach them.
+
+### 2. Configure the proxy host in Nginx Proxy Manager
+
+Add a new proxy host:
+
+**Details tab**
+- Domain Name: `memory-bank.example.com`
+- Forward Hostname/Port: `<host-LAN-IP>` `:5174` (the viewer is the default upstream)
+- Block Common Exploits: on
+- Websockets Support: on (the MCP transport keeps the connection open with SSE-style framing)
+
+**Custom Locations** — three entries that route the auth-server paths to the MCP container:
+
+| Location | Forward Hostname (LAN IP) | Port |
+|---|---|---|
+| `/mcp` | `<host-LAN-IP>` | `6868` |
+| `/oauth` | `<host-LAN-IP>` | `6868` |
+| `/.well-known` | `<host-LAN-IP>` | `6868` |
+
+Open the **Advanced** subsection of the `/mcp` location and paste:
+
+```nginx
+proxy_buffering off;
+proxy_cache off;
+proxy_read_timeout 1h;
+chunked_transfer_encoding on;
+```
+
+(MCP HTTP transport keeps long-lived streaming responses open. Without these, NPM's default 60s read timeout will cut connections mid-call.)
+
+**SSL tab**: request a Let's Encrypt cert, force SSL, enable HTTP/2.
+
+Save. The browser flow is now: visit `https://memory-bank.example.com/` → 302 to `/auth/login` → 302 to `/oauth/authorize` (login form) → submit → 302 back to `/auth/callback` → 302 to `/`. The graph loads.
+
+### 3. Register the MCP on each device
+
+Per device, one command — Claude Code handles the OAuth dance via your browser:
+
+```bash
+claude mcp add --transport http --scope user memorybank https://memory-bank.example.com/mcp
+```
+
+The first call to a MemoryBank tool will pop a browser to the login page. After you sign in, Claude Code caches the bearer + refresh tokens locally; subsequent sessions are silent.
+
+To revoke a device:
+
+```bash
+# Removes the local token cache; the refresh token in SQLite stays until it expires.
+# To kill it server-side too, log in to the viewer and POST /auth/logout, or wipe the
+# row directly from oauth_refresh_tokens.
+claude mcp remove memorybank
+```
+
+### Rolling back
+
+If something goes wrong:
+
+```bash
+docker compose down            # stop containers (data persists in the volume)
+docker compose down -v         # nuke the volume too — wipes the database AND all OAuth tokens
+git revert <commit>            # roll back to a previous deployment
+```
+
+The schema migration v4 only **adds** OAuth tables; rolling back to a pre-auth version still works against the same DB (the tables just go unused).
 
 ---
 
@@ -441,6 +553,18 @@ See `src/MemoryBank.Web/README.md` for the web-specific API and dev details.
 
 **Port 5174 / 6868 already in use**
 → Change the host-side ports in `docker-compose.yml` (e.g., `"5175:5174"`), or set `ASPNETCORE_URLS` when running from source.
+
+**Server exits at startup with "HTTP transport requires MEMORYBANK_AUTH_USERNAME and MEMORYBANK_AUTH_PASSWORD_HASH"**
+→ Auth env vars are missing. Generate a hash with `dotnet run --project src/MemoryBank.Server -- --hash-password '<pw>'` and put `MEMORYBANK_AUTH_USERNAME=...` and `MEMORYBANK_AUTH_PASSWORD_HASH=...` into `.env` (or the container's environment).
+
+**OAuth login redirects loop or the metadata advertises `http://` instead of `https://`**
+→ nginx isn't forwarding the right headers. The proxy host needs `proxy_set_header X-Forwarded-Proto $scheme;` (NPM enables this by default). Without it, `MemoryBank.Server` builds the auth URLs from the request's plain-HTTP scheme, so cookies miss `Secure` and the browser refuses to send them back.
+
+**`Set-Cookie` arrives but the next request has no cookie**
+→ You're loading the viewer over HTTP while the cookie is `Secure`. Use HTTPS (the production setup), or unset `IsHttps` in dev. The cookie code reads `ctx.Request.IsHttps` — make sure `UseForwardedHeaders` runs before the cookie is set.
+
+**`/mcp` returns 401 even after a successful login in the browser**
+→ The MCP transport doesn't carry the browser's cookies. Use `claude mcp add --transport http memorybank https://memory-bank.example.com/mcp` so Claude Code drives its own OAuth flow and stores its own bearer token.
 
 ---
 

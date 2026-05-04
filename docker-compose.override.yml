@@ -1,0 +1,29 @@
+# docker-compose.override.yml — auth-enabled production overrides
+#
+# Loaded automatically by `docker compose up`. Together with docker-compose.yml,
+# this enables OAuth on the MCP server. Username/password come from .env (which
+# is git-ignored). Generate the hash with:
+#
+#   dotnet run --project src/MemoryBank.Server -- --hash-password 'your-password'
+#
+# Then put the result in .env:
+#
+#   MEMORYBANK_AUTH_USERNAME=youruser
+#   MEMORYBANK_AUTH_PASSWORD_HASH=pbkdf2-sha256$100000$...$...
+#
+# Network model: both containers keep their default 0.0.0.0 bindings so a
+# reverse proxy (nginx, NPM) on the same Docker host can reach them via the
+# host's LAN IP. Public access must be blocked at the host firewall.
+
+services:
+  memorybank:
+    environment:
+      MEMORYBANK_AUTH_USERNAME: "${MEMORYBANK_AUTH_USERNAME:?set MEMORYBANK_AUTH_USERNAME in .env}"
+      MEMORYBANK_AUTH_PASSWORD_HASH: "${MEMORYBANK_AUTH_PASSWORD_HASH:?set MEMORYBANK_AUTH_PASSWORD_HASH in .env}"
+
+  memorybank-web:
+    # Viewer doesn't validate credentials itself — it issues OAuth redirects to
+    # the MCP server. Override MEMORYBANK_AUTH_BASE_URL only when nginx isn't
+    # collapsing both onto a single host (e.g. dev with separate ports).
+    environment:
+      MEMORYBANK_AUTH_BASE_URL: "${MEMORYBANK_AUTH_BASE_URL:-}"

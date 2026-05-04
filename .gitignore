@@ -9,3 +9,7 @@ obj/
 
 # Large model files - download separately or use Git LFS
 *.onnx
+
+# Environment overrides — never commit real credentials
+.env
+.env.local
