@@ -43,7 +43,7 @@ Use the **Agent tool** to spawn a single subagent. Pass it a prompt with the par
 
 **Check duplicates:** Call `mcp__memorybank__recall(query: "<task summary>", category: "todos", limit: 3)`. If a very similar open todo exists, return it so the main agent can ask the user.
 
-**Store:** Call `mcp__memorybank__remember` with: content formatted as "TODO: <task>\nStatus: open\nDue: <date or 'none'>\nCreated: <today>", summary: "<concise task summary>", category: "todos", tags: "<tags, always include 'todo'>", type: "fact", priority: <1-5>, source: "conversation".
+**Store:** Call `mcp__memorybank__remember` with: content formatted as "TODO: <task>\nStatus: open\nDue: <date or 'none'>\nCreated: <today>", summary: "<concise task summary>", category: "todos", tags: "<tags, always include 'todo'>", type: "todo", priority: <1-5>, source: "conversation".
 
 **Return:** The stored todo's title, due date, priority, tags, and whether a duplicate was found. Exclude memory IDs, chunk info, raw JSON.
 

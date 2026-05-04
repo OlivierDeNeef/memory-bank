@@ -89,10 +89,10 @@ public class SmokeTest : IDisposable
             "architecture/auth", ["auth", "jwt", "security"], MemoryType.Decision, 4);
 
         StoreMemory("Database backups run every night at 2 AM via a cron job on the prod server",
-            "operations/backup", ["database", "backup", "cron"], MemoryType.Procedure, 3);
+            "operations/backup", ["database", "backup", "cron"], MemoryType.Guide, 3);
 
         StoreMemory("The frontend uses React 18 with TypeScript and Tailwind CSS",
-            "architecture/frontend", ["react", "typescript", "frontend"], MemoryType.Fact, 3);
+            "architecture/frontend", ["react", "typescript", "frontend"], MemoryType.Reference, 3);
 
         StoreMemory("We chose PostgreSQL over MongoDB because we need ACID transactions for billing",
             "architecture/database", ["database", "postgresql"], MemoryType.Decision, 5);
@@ -116,7 +116,7 @@ public class SmokeTest : IDisposable
     public void Full_RoundTrip_Update_And_Revision_History()
     {
         var id = StoreMemory("API rate limit is 100 requests per minute",
-            "architecture/api", ["api", "rate-limit"], MemoryType.Fact, 3);
+            "architecture/api", ["api", "rate-limit"], MemoryType.Reference, 3);
 
         // Update the fact
         _store.Update(id, "API rate limit is 1000 requests per minute",
@@ -138,9 +138,9 @@ public class SmokeTest : IDisposable
     [Fact]
     public void Full_RoundTrip_Category_And_Tag_Filtering()
     {
-        StoreMemory("Backend uses .NET 8", "projects/backend", ["dotnet"], MemoryType.Fact, 3);
-        StoreMemory("Frontend uses Next.js", "projects/frontend", ["nextjs"], MemoryType.Fact, 3);
-        StoreMemory("Backend API is REST", "projects/backend", ["api", "rest"], MemoryType.Fact, 3);
+        StoreMemory("Backend uses .NET 8", "projects/backend", ["dotnet"], MemoryType.Reference, 3);
+        StoreMemory("Frontend uses Next.js", "projects/frontend", ["nextjs"], MemoryType.Reference, 3);
+        StoreMemory("Backend API is REST", "projects/backend", ["api", "rest"], MemoryType.Reference, 3);
 
         // Category filter
         var backendResults = _search.Search(new SearchRequest
@@ -197,7 +197,7 @@ public class SmokeTest : IDisposable
     [Fact]
     public void Backup_And_Stats()
     {
-        StoreMemory("Test memory for backup", null, [], MemoryType.Fact, 3);
+        StoreMemory("Test memory for backup", null, [], MemoryType.Reference, 3);
 
         var backupService = new BackupService(_config, NullLogger<BackupService>.Instance);
         var backupPath = backupService.CreateBackup();

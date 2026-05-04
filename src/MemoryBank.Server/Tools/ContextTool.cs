@@ -19,7 +19,7 @@ public class ContextTool
     }
 
     [McpServerTool(Name = "recall_context"),
-     Description("Recall all memories relevant to a project context. Runs a broad semantic search and always includes pinned memories. Returns results grouped by type (decisions, procedures, references, etc.).")]
+     Description("Recall all memories relevant to a project context. Runs a broad semantic search and always includes pinned memories. Returns results grouped by type (todos, decisions, references, guides).")]
     public string RecallContext(
         [Description("Project description: name, tech stack, goals, domain — anything that helps match relevant memories")]
         string description,

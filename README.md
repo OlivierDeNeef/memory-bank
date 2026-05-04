@@ -2,7 +2,7 @@
 
 A persistent, searchable memory system for AI assistants, exposed as an MCP server — plus a 2D force-directed graph viewer for exploring what you've stored.
 
-- **Store**: facts, decisions, procedures, references, observations — tagged, categorized, versioned
+- **Store**: todos, decisions, references, guides — tagged, categorized, versioned
 - **Recall**: hybrid search (SQLite FTS5 + semantic cosine over local ONNX embeddings)
 - **Explore**: web UI that renders your memory as a graph, with edges for explicit links, semantic similarity, tag overlap, and shared categories
 
@@ -224,6 +224,188 @@ Dockerfile                   Image for the MCP server (HTTP transport on :6868)
 Dockerfile.web               Multi-stage image for the graph viewer (:5174)
 docker-compose.yml           Both services sharing a memorybank-data volume
 ```
+
+---
+
+## Architecture
+
+A detailed walk-through of how DeepMind is put together. Section 1 covers the shared library, section 2 the MCP server, section 3 the web viewer, section 4 the Claude Code plugin, and section 5 the end-to-end flows that tie it all together.
+
+### 1. DeepMind.Core — storage, search, embeddings
+
+#### SQLite schema (`Storage/Migrations.cs`)
+
+Schema v3; every table has `created_at`, foreign keys are `ON DELETE CASCADE`. The migration runner toggles `PRAGMA foreign_keys` OFF around migrations so CHECK/column rebuilds (like v3) don't cascade-delete dependent rows; a `foreign_key_check` sanity-check runs after all pending migrations.
+
+| Table | Purpose |
+|---|---|
+| `memories` | core record: `id`, `content`, `summary`, `category_id`, `type` (todo\|decision\|reference\|guide — schema v3; see `Storage/Migrations.cs`), `priority` 1–5, `is_pinned`, `is_archived`, `access_count`, `revision_number`, `token_count`, `valid_from/until`, `source`, `metadata` (JSON), timestamps |
+| `categories` | hierarchical (self-FK via `parent_id`), unlimited depth |
+| `revisions` | immutable history; UNIQUE(memory_id, revision_number) |
+| `chunks` | split content per memory for embedding/FTS; UNIQUE(memory_id, chunk_index) |
+| `embeddings` | BLOB vectors keyed by `chunk_id` + `model` name |
+| `tags` + `memory_tags` | normalized many-to-many |
+| `memory_links` | explicit edges (source_id, target_id, link_type) — `Related` / `Supersedes` / `Contradicts` / `Extends` |
+| `audit_log` | every create/update/delete/recall |
+| `schema_version` | tracks applied migrations |
+
+Plus an **FTS5 virtual table** `chunks_fts` over `(content, summary, keywords)` with `porter unicode61` tokenizer. Three triggers (`chunks_ai/ad/au`) keep FTS in sync. BM25 column weights at query time: `1.0 / 2.0 / 3.0` (keywords weighted highest). Indexes on category, priority, type, created, archived (memories); memory_id/chunk_id (embeddings); tag name; category parent.
+
+#### Connection (`Storage/DeepMindDb.cs`)
+
+On open, applies `PRAGMA journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`. Exposes `CreateCommand`, `BeginTransaction`, `Checkpoint()` (WAL truncate), `Vacuum()`.
+
+#### MemoryStore (`Storage/MemoryStore.cs`)
+
+All mutating operations wrap `BeginTransaction` + rollback on throw. Highlights:
+
+- `Insert`: memory → tag links → chunks → audit, all in one transaction.
+- `Update`: snapshots current row into `revisions` before applying a **dynamic UPDATE** (only non-null fields). Bumps `revision_number`.
+- `Delete` / `BulkDelete`: cascades via FKs, then cleans orphan tags and orphan categories iteratively.
+- `ListMemories`: filters by category-IDs, tags (AND/OR mode), types, archived; orders `pinned DESC, access_count DESC, created_at DESC`; returns `(rows, totalCount)`.
+- `EnsureCategoryPath("a/b/c")`: creates nested hierarchy on demand, returns leaf id.
+- Graph helpers: `GetLinksWithin(ids)`, `GetTagAssignmentsFor(ids)`, `GetAllEmbeddings()` for the viewer.
+- `IncrementAccessCount` on every recall hit; `last_accessed` updated.
+
+#### BackupService (`Storage/BackupService.cs`)
+
+Uses `SqliteConnection.BackupDatabase()` for atomic snapshots, files named by timestamp. `IsBackupDue` checks interval (default 24 h), retention keeps the last `MaxBackups` (default 10). Restore runs `PRAGMA integrity_check` on the backup file before copy.
+
+#### Hybrid search (`Search/HybridSearchEngine.cs`)
+
+Final score formula:
+
+```
+finalScore =
+    VectorWeight   * vectorScore     // default 0.40
+  + KeywordWeight  * keywordScore    // default 0.35
+  + PriorityWeight * priorityScore   // default 0.25
+  + pinBonus (if pinned, +0.5)
+  + log2(accessCount + 1) * AccessBoostFactor / 100
+  - recencyDays * RecencyDecayPerDay / 100
+```
+
+- **Keyword phase**: sanitizes the query (strips quotes, supports `NOT`), runs `bm25(chunks_fts, 1.0, 2.0, 3.0)` — keywords column weighted highest — deduplicates to best score per memory, then normalizes to 0..1 by dividing by max.
+- **Vector phase**: embeds the query with `search_query:` prefix, cosine vs. every stored embedding, minimum similarity 0.1, best per memory.
+- **Filters**: category (expanded to descendant IDs), tags (AND/OR), types, priority floor, date window, validity (`valid_from/until`), archived gate.
+- `FindSimilar` reuses the vector path for duplicate detection (default threshold 0.90) during `remember`.
+- `SearchRecent` short-circuits text search when only a date window is given.
+- Every hit writes an audit row (`recalled`).
+
+#### Chunking (`Search/ChunkingService.cs`)
+
+Token count ≈ `wordCount * 1.33`. If text fits in `MaxTokensPerChunk` (default 400), one chunk. Otherwise: split by sentence (regex on `.!?\n`), greedily pack up to the budget, and **keep the last few sentences as overlap** (default 50 tokens) into the next chunk for continuity. Each chunk's `summary` gets prefixed with memory-level context: `[summary | category/path | tag1, tag2] …`. Keywords propagate from the memory's tags.
+
+#### ONNX embeddings (`Embeddings/OnnxEmbeddingService.cs`)
+
+Loads `nomic-embed-text-v1.5` (768-d) via `InferenceSession`. BertTokenizer from `vocab.txt` (falls back to hash-based tokens if missing). At inference:
+
+1. Prefix text — `search_query:` for queries, `search_document:` for stored content (Nomic's task-conditioned prefixes).
+2. Tokenize, cap at 512, build `input_ids` / `attention_mask` / optional `token_type_ids` tensors.
+3. Mean-pool across attended tokens (mask-weighted average).
+4. L2-normalize.
+
+If the model file is missing, vector search silently falls back — keyword search keeps working, similarity edges are empty in the viewer.
+
+#### Configuration (`Configuration/DeepMindConfiguration.cs`)
+
+Sections: `Database` (path, WAL, busy timeout), `Backup` (path, interval, max), `Embedding` (path, name, dims, chunk size/overlap), `Search` (weights, pin bonus, decay, access boost, limits), `Validation` (max content 100 k, max tags 50, max category depth 10, etc.), `MemoryDefaults` (priority 3, type reference, duplicate threshold 0.90), `Logging` (path, rotation). All overridable via `appsettings.json` or `DeepMind__*` env vars.
+
+### 2. DeepMind.Server — MCP surface
+
+#### Startup (`Program.cs`)
+
+Transport picked via `--http` flag or `DEEPMIND_TRANSPORT=http`. DI registers `DeepMindDb`, `MemoryStore`, `OnnxEmbeddingService`, `ChunkingService`, `HybridSearchEngine`, `BackupService` as singletons. Either `AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly()` (stdio, logs to stderr so stdout is clean protocol) or `.WithHttpTransport()` + `MapMcp("/mcp")` + `MapOAuth("/mcp")` + `/health`. On startup, `RunAutoBackup` fires if `IsBackupDue`.
+
+#### OAuth (`OAuthEndpoints.cs`)
+
+PKCE OAuth 2.1 for the MCP Streamable-HTTP auth handshake:
+
+- `.well-known/oauth-protected-resource/mcp` + `.well-known/oauth-authorization-server` metadata
+- `POST /oauth/register` — auto-issues `client_id`
+- `GET /oauth/authorize` — issues code with PKCE challenge, redirects
+- `POST /oauth/token` — verifies S256 challenge, 5-min code window, 24-h token
+
+#### Tools (`Tools/*.cs`)
+
+Each tool uses `[McpServerTool]` and is exposed as `mcp__deepmind__<name>`:
+
+| File | Tools |
+|---|---|
+| `RememberTool` | `remember` — validate → `FindSimilar` dupe check → chunk with context → transactional insert |
+| `RecallTool` | `recall`, `recall_recent`, `exists` |
+| `ManageTool` | `get_memory`, `get_chunks`, `pin`/`unpin`, `archive`/`unarchive`, `update_memory`, `forget`, `link_memories`, `unlink_memories`, `get_linked` |
+| `CategoryTool` | `list_categories`, `create_category`, `rename_category`, `delete_category`, `move_memory`, `list_tags`, `rename_tag`, `merge_tags` |
+| `BulkTool` | `bulk_tag`, `bulk_recategorize`, `bulk_priority`, `bulk_forget`, `cleanup_orphans` |
+| `RevisionTool` | `get_revisions`, `get_revision`, `diff_revisions`, `restore_revision` |
+| `HealthTool` | `health_check`, `memory_stats`, `count`, `backup`, `restore_backup` |
+| `ExportImportTool` | `export`, `import` (JSON) |
+| `EnrichChunksTool` | `enrich_chunks`, `reembed_all` |
+| `ContextTool` | `recall_context` — semantic pull for a broad topic |
+
+### 3. DeepMind.Web — graph viewer
+
+#### Backend (`Program.cs`, `Endpoints/GraphEndpoints.cs`, `Services/GraphService.cs`)
+
+Same DI as the MCP server + `GraphService`. CORS allows `localhost:5173` for Vite dev. Pipeline: `UseDefaultFiles` → `UseStaticFiles` → `MapGraphEndpoints` → SPA fallback to `index.html`.
+
+Endpoints:
+
+- `GET /api/filters` — categories, tags, types, counts, embedding availability
+- `GET /api/graph?edgeTypes=…&categories=…&tags=…&types=…&includeArchived=…&simThreshold=0.78&simTopK=5&tagJaccardMin=0.3&limit=…`
+- `GET /api/memory/{id}` — content, linked memories, revision history, chunks
+- `GET /api/search?q=…` — live hybrid search for node scoring
+
+`GraphService.Build`:
+
+1. Resolve category paths → IDs (+ descendants), call `ListMemories`.
+2. Build nodes (`id`, `label` = summary or first 80 chars, `type`, `categoryId/Path`, `tags`, `priority`, `pinned`, `accessCount`, `createdAt`).
+3. Build edges per opted-in type:
+   - **Links** — `GetLinksWithin(nodeIds)`, weight 1.0.
+   - **Tags** — pairwise **Jaccard** on tag sets, kept if ≥ `tagJaccardMin`.
+   - **Category** — all pairs sharing a category, weight 1.0.
+   - **Similarity** — mean-pool each memory's chunk embeddings, cosine over all pairs, keep top-K per node above `simThreshold`, canonicalized to dedupe.
+
+#### Frontend (`ClientApp/`)
+
+`App.tsx` orchestrates: FilterPanel (left), Graph2D/Graph3D (center, toggled), DetailPanel (right), Legend. Filter changes → **200 ms debounce** → fetch `/api/graph` with an `AbortController` to cancel stale requests. `focusId = hoveredNodeId ?? selectedNodeId`.
+
+`store.ts` (Zustand) holds filter state, `viewMode` (`2d`/`3d`), `selectedNodeId`, `hoveredNodeId`, `searchQuery`, and a `searchScores: Map<id, 0..1>` used to scale node sizes during search.
+
+`Graph2D.tsx` wires `react-force-graph-2d` with custom d3 forces:
+
+- `charge`: `-160 * (nodeSize / baseRadius)`, `distanceMax=360`
+- `link`: `distance = 200 - strength*140`, `strength = 0.4 + strength*0.5`
+- `collide`: `nodeSize + 6`, strength `0.9`
+- Node positions cached across filter refreshes so the graph smoothly morphs instead of re-laying-out.
+- Search reheats the simulation when `searchScores` change.
+
+`Graph3D.tsx` uses `react-force-graph-3d` + Three.js with `three-spritetext` labels.
+
+`FilterPanel.tsx` exposes edge-type checkboxes, multi-select for categories/tags/types, threshold sliders (`simThreshold`, `tagJaccardMin`), and a 120 ms debounced live-search box that populates `searchScores`.
+
+Key deps: `react-force-graph-2d` 1.27, `react-force-graph-3d` 1.26, `three` 0.171, `three-spritetext` 1.9, `d3-force` 3, `zustand` 5, `lucide-react`.
+
+### 4. DeepMind.Plugin — Claude Code integration
+
+`.claude-plugin/plugin.json` declares the plugin, skills directory, and two `PreToolUse` hooks:
+
+- `scripts/block-direct-mcp.sh` — intercepts raw `mcp__deepmind__*` calls and redirects the agent to the skill layer, so tool noise stays out of the main context.
+- `scripts/block-auto-memory.sh` — prevents Claude's auto-memory from accidentally writing Read/Write/Edit scaffolding into DeepMind.
+
+Skills under `skills/{remember,recall,search,stats,todo,forget}/SKILL.md` each document purpose, parameters, and output shape. `CLAUDE.md` mandates that skill execution runs inside a single subagent via the Agent tool so only the clean final result surfaces.
+
+### 5. End-to-end flows
+
+**Store (`/remember`)**: skill → subagent → `mcp__deepmind__remember` → validate → `FindSimilar` (≥0.90 → duplicate warning) → `ChunkingService.ChunkText` (sentence-pack + overlap, add context prefix) → embed each chunk (`search_document:`) → transactional insert of memory + tag links + chunks + embeddings + audit → return `{id, chunkCount, elapsedMs}`.
+
+**Recall (`/recall`)**: skill → subagent → `mcp__deepmind__recall` → parse filters → `HybridSearchEngine.Search` → BM25(FTS5) ∪ cosine(ONNX) → merge + priority-weight + pin bonus + access boost − recency decay → sort/paginate → audit → ranked results.
+
+**Update**: `update_memory` snapshots the current row into `revisions`, dynamically updates non-null fields, re-chunks and re-embeds if content changed, bumps `revision_number`. `restore_revision` pulls a past snapshot back into the live row (and itself creates a new revision).
+
+**Graph explore**: Vite SPA → `/api/graph` → `GraphService.Build` assembles filtered nodes and the requested edge types (links / tag-Jaccard ≥ 0.3 / same category / cosine top-K ≥ 0.78) → react-force-graph renders; clicking a node pulls `/api/memory/{id}` into the detail panel (content, revisions, linked memories, chunks); search rescales nodes by hybrid score.
+
+**Backup**: auto-checked on server startup; if interval elapsed, `SqliteConnection.BackupDatabase()` snapshots to `~/.deepmind/backups/`, retention trims the oldest.
 
 ---
 

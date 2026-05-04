@@ -55,7 +55,7 @@ public class HealthTool
             embeddingStatus = _embeddings.IsAvailable ? "ok" : "unavailable",
             pendingReembeddings = 0,
             lastBackup = _backup.GetLastBackupTime(),
-            schemaVersion = 1,
+            schemaVersion = _db.CurrentSchemaVersion,
             checkDurationMs = sw.ElapsedMilliseconds
         }).ToJson();
     }

@@ -59,7 +59,7 @@ Take the subagent's response and format as a clean dashboard.
 > | Revisions | <total> |
 > | Database size | <size in human-readable format> |
 >
-> **Types:** <type distribution, e.g. "42 facts, 12 decisions, 8 procedures">
+> **Types:** <type distribution, e.g. "12 todos, 8 decisions, 42 references, 6 guides">
 > **Priority:** <distribution, e.g. "3 critical, 15 high, 28 normal">
 > **Top categories:** <top 5 with counts>
 > **Top tags:** <top 10 with counts>

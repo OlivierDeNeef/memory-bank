@@ -25,6 +25,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-direct-mcp.sh"
           }
         ]
+      },
+      {
+        "matcher": "Read|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-auto-memory.sh"
+          }
+        ]
       }
     ]
   }

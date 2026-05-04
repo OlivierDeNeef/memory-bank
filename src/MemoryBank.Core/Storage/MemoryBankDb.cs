@@ -58,33 +58,74 @@ public class MemoryBankDb : IDisposable
         EnsureSchemaVersionTable();
         var currentVersion = GetSchemaVersion();
 
-        foreach (var migration in Migrations.All.Where(m => m.Version > currentVersion).OrderBy(m => m.Version))
+        var pending = Migrations.All
+            .Where(m => m.Version > currentVersion)
+            .OrderBy(m => m.Version)
+            .ToList();
+        if (pending.Count == 0) return;
+
+        // Column/CHECK migrations rebuild tables via DROP + INSERT + RENAME. With FKs
+        // enforced, dropping `memories` would cascade-delete chunks/embeddings/revisions/
+        // memory_tags/memory_links. PRAGMA foreign_keys is a no-op inside a transaction,
+        // so it must be toggled outside the per-migration transaction.
+        SetForeignKeys(false);
+        try
         {
-            _logger.LogInformation("Applying migration V{Version}: {Description}", migration.Version, migration.Description);
-
-            using var transaction = _connection.BeginTransaction();
-            try
+            foreach (var migration in pending)
             {
-                using var cmd = _connection.CreateCommand();
-                cmd.Transaction = transaction;
-                cmd.CommandText = migration.Sql;
-                cmd.ExecuteNonQuery();
+                _logger.LogInformation("Applying migration V{Version}: {Description}", migration.Version, migration.Description);
 
-                cmd.CommandText = "INSERT INTO schema_version (version, applied_at, description) VALUES (@v, @t, @d)";
-                cmd.Parameters.Clear();
-                cmd.Parameters.AddWithValue("@v", migration.Version);
-                cmd.Parameters.AddWithValue("@t", DateTime.UtcNow.ToString("o"));
-                cmd.Parameters.AddWithValue("@d", migration.Description);
-                cmd.ExecuteNonQuery();
+                using var transaction = _connection.BeginTransaction();
+                try
+                {
+                    using var cmd = _connection.CreateCommand();
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = migration.Sql;
+                    cmd.ExecuteNonQuery();
 
-                transaction.Commit();
-                _logger.LogInformation("Migration V{Version} applied successfully", migration.Version);
+                    cmd.CommandText = "INSERT INTO schema_version (version, applied_at, description) VALUES (@v, @t, @d)";
+                    cmd.Parameters.Clear();
+                    cmd.Parameters.AddWithValue("@v", migration.Version);
+                    cmd.Parameters.AddWithValue("@t", DateTime.UtcNow.ToString("o"));
+                    cmd.Parameters.AddWithValue("@d", migration.Description);
+                    cmd.ExecuteNonQuery();
+
+                    transaction.Commit();
+                    _logger.LogInformation("Migration V{Version} applied successfully", migration.Version);
+                }
+                catch
+                {
+                    transaction.Rollback();
+                    throw;
+                }
             }
-            catch
-            {
-                transaction.Rollback();
-                throw;
-            }
+
+            AssertForeignKeyIntegrity();
+        }
+        finally
+        {
+            SetForeignKeys(true);
+        }
+    }
+
+    private void SetForeignKeys(bool enabled)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = $"PRAGMA foreign_keys={(enabled ? "ON" : "OFF")};";
+        cmd.ExecuteNonQuery();
+    }
+
+    private void AssertForeignKeyIntegrity()
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "PRAGMA foreign_key_check;";
+        using var reader = cmd.ExecuteReader();
+        if (reader.Read())
+        {
+            var table = reader.GetString(0);
+            var rowid = reader.IsDBNull(1) ? "null" : reader.GetValue(1).ToString();
+            throw new InvalidOperationException(
+                $"Foreign key integrity violation after migrations (table={table}, rowid={rowid}). Aborting startup.");
         }
     }
 
@@ -107,6 +148,8 @@ public class MemoryBankDb : IDisposable
         cmd.CommandText = "SELECT COALESCE(MAX(version), 0) FROM schema_version";
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
+
+    public int CurrentSchemaVersion => GetSchemaVersion();
 
     public SqliteCommand CreateCommand(string sql, SqliteTransaction? transaction = null)
     {

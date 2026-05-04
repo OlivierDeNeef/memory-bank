@@ -37,7 +37,7 @@ public class IndexResource
                 name = t.Name,
                 count = t.UsageCount
             }),
-            memoryTypes = new[] { "fact", "decision", "procedure", "reference", "observation" },
+            memoryTypes = new[] { "todo", "decision", "reference", "guide" },
             totalMemories = stats["totalMemories"],
             totalCategories = stats["totalCategories"],
             totalTags = stats["totalTags"]

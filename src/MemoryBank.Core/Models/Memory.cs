@@ -6,7 +6,7 @@ public class Memory
     public string Content { get; set; } = string.Empty;
     public string? Summary { get; set; }
     public string? CategoryId { get; set; }
-    public MemoryType Type { get; set; } = MemoryType.Fact;
+    public MemoryType Type { get; set; } = MemoryType.Reference;
     public int Priority { get; set; } = 3;
     public bool IsPinned { get; set; }
     public bool IsArchived { get; set; }
@@ -28,9 +28,8 @@ public class Memory
 
 public enum MemoryType
 {
-    Fact,
+    Todo,
     Decision,
-    Procedure,
     Reference,
-    Observation
+    Guide
 }

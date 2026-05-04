@@ -125,7 +125,15 @@ public class ExportImportTool
             {
                 var content = item.GetProperty("content").GetString()!;
                 var categoryPath = item.TryGetProperty("category", out var catEl) ? catEl.GetString() : null;
-                var type = item.TryGetProperty("type", out var typeEl) ? typeEl.GetString() ?? "fact" : "fact";
+                var type = item.TryGetProperty("type", out var typeEl) ? typeEl.GetString() ?? "reference" : "reference";
+                // Legacy imports (pre-v3 schema) used fact/procedure/observation — remap to the current set.
+                type = type.ToLowerInvariant() switch
+                {
+                    "fact" => "todo",
+                    "observation" => "guide",
+                    "procedure" => "guide",
+                    _ => type
+                };
                 var priority = item.TryGetProperty("priority", out var priEl) ? priEl.GetInt32() : 3;
                 var tags = item.TryGetProperty("tags", out var tagsEl)
                     ? tagsEl.EnumerateArray().Select(t => t.GetString()!).ToList()

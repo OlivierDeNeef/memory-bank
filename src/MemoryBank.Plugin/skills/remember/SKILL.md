@@ -1,8 +1,8 @@
 ---
 name: remember
-description: Store new knowledge in MemoryBank. Use when the user wants to save facts, decisions, procedures, or references.
+description: Store new knowledge in MemoryBank. Use when the user wants to save todos, decisions, references, or guides.
 user-invocable: true
-argument-hint: "<content> [--category <path>] [--tags <t1,t2>] [--type <fact|decision|procedure|reference|observation>] [--priority <1-5>]"
+argument-hint: "<content> [--category <path>] [--tags <t1,t2>] [--type <todo|decision|reference|guide>] [--priority <1-5>]"
 
 ---
 
@@ -24,16 +24,16 @@ If content provided as argument, use it directly.
 
 If no content, analyze the current conversation for:
 - Decisions made
-- Facts learned
-- Procedures discovered
+- Todos raised
 - References shared
+- Guides / how-tos worked out
 
 Ask the user to confirm what should be stored.
 
 ### Step 2: Classify the Memory (main agent)
 
 Determine or ask:
-- **type** — `fact` (default), `decision`, `procedure`, `reference`, `observation`
+- **type** — `reference` (default), `todo`, `decision`, `guide`. Pick the best fit: `todo` for an action the user still needs to do, `decision` for a choice that has been made, `reference` for factual/lookup content, `guide` for how-to/instructional content.
 - **category** — Suggest based on content (e.g., `projects/memorybank`, `architecture/auth`)
 - **priority** — 1 (trivial) to 5 (critical), default 3
 - **tags** — Extract keywords from content

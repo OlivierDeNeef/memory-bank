@@ -177,6 +177,62 @@ public static class Migrations
                 INSERT INTO chunks_fts(rowid, content, summary, keywords)
                 VALUES (new.rowid, new.content, new.summary, new.keywords);
             END;
+            """),
+
+        new(3, "Rename memory types: fact→todo, observation→guide, drop procedure→guide", """
+            -- Rebuild memories with updated CHECK constraint and remap existing type values.
+            -- FKs from chunks/embeddings/revisions/memory_tags/memory_links all cascade on
+            -- delete of memories, so this migration only works when the runner disables
+            -- foreign_keys before executing (PRAGMA is a no-op inside a transaction).
+
+            CREATE TABLE memories_new (
+                id              TEXT PRIMARY KEY,
+                content         TEXT NOT NULL,
+                summary         TEXT,
+                category_id     TEXT REFERENCES categories(id),
+                type            TEXT NOT NULL DEFAULT 'reference'
+                                CHECK(type IN ('todo','decision','reference','guide')),
+                priority        INTEGER NOT NULL DEFAULT 3,
+                is_pinned       INTEGER NOT NULL DEFAULT 0,
+                is_archived     INTEGER NOT NULL DEFAULT 0,
+                access_count    INTEGER NOT NULL DEFAULT 0,
+                revision_number INTEGER NOT NULL DEFAULT 1,
+                token_count     INTEGER,
+                valid_from      TEXT,
+                valid_until     TEXT,
+                source          TEXT,
+                metadata        TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                last_accessed   TEXT
+            );
+
+            INSERT INTO memories_new (
+                id, content, summary, category_id, type, priority, is_pinned, is_archived,
+                access_count, revision_number, token_count, valid_from, valid_until,
+                source, metadata, created_at, updated_at, last_accessed
+            )
+            SELECT
+                id, content, summary, category_id,
+                CASE type
+                    WHEN 'fact'        THEN 'todo'
+                    WHEN 'observation' THEN 'guide'
+                    WHEN 'procedure'   THEN 'guide'
+                    ELSE type
+                END,
+                priority, is_pinned, is_archived,
+                access_count, revision_number, token_count, valid_from, valid_until,
+                source, metadata, created_at, updated_at, last_accessed
+            FROM memories;
+
+            DROP TABLE memories;
+            ALTER TABLE memories_new RENAME TO memories;
+
+            CREATE INDEX idx_memories_category ON memories(category_id);
+            CREATE INDEX idx_memories_priority ON memories(priority);
+            CREATE INDEX idx_memories_type ON memories(type);
+            CREATE INDEX idx_memories_created ON memories(created_at);
+            CREATE INDEX idx_memories_archived ON memories(is_archived);
             """)
     ];
 }

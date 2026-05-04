@@ -1,32 +1,21 @@
-// Deterministic color per category path (stable across loads)
-const palette = [
-  "#60a5fa", // blue
-  "#f472b6", // pink
-  "#34d399", // emerald
-  "#fbbf24", // amber
-  "#a78bfa", // violet
-  "#f87171", // red
-  "#22d3ee", // cyan
-  "#fb923c", // orange
-  "#4ade80", // green
-  "#e879f9", // fuchsia
-  "#94a3b8", // slate
-  "#fde047", // yellow
-];
+// Memory type → node fill color. Chosen to be visually distinct from each other
+// AND from `pinnedColor`, so the pinned halo can never be confused with a type fill.
+export const typeColors: Record<string, string> = {
+  todo: "#60a5fa",      // blue
+  decision: "#f472b6",  // pink
+  reference: "#a78bfa", // violet
+  guide: "#34d399",     // emerald — avoids collision with `edgeColors.tags` orange
+};
 
-function hashString(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
+const unknownTypeColor = "#94a3b8"; // slate
+
+export function typeColor(type: string | null | undefined): string {
+  if (!type) return unknownTypeColor;
+  return typeColors[type] ?? unknownTypeColor;
 }
 
-export function categoryColor(path: string | null | undefined): string {
-  if (!path) return "#6b7280"; // uncategorized = gray
-  return palette[hashString(path) % palette.length];
-}
+// Reserved exclusively for the pinned halo — no type color uses this hue.
+export const pinnedColor = "#fde047"; // yellow
 
 export const edgeColors: Record<string, string> = {
   link: "#ffffff",

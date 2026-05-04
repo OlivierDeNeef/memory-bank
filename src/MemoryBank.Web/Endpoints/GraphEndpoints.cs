@@ -20,8 +20,19 @@ public static class GraphEndpoints
 
     private static IResult GetFilters(MemoryStore store, OnnxEmbeddingService embeddings)
     {
-        var categories = store.GetAllCategories()
-            .Select(c => new CategoryOption(c.Id, c.Path, c.Name, c.MemoryCount))
+        // Roll up direct counts into descendant-aware counts so a parent category
+        // (e.g. "DeepMind") reflects memories stored under its children
+        // (e.g. "DeepMind/Architecture"). The UI treats selecting a parent as
+        // "include everything under this path", so counts should match.
+        var allCategories = store.GetAllCategories();
+        var categories = allCategories
+            .Select(c => new CategoryOption(
+                c.Id,
+                c.Path,
+                c.Name,
+                allCategories
+                    .Where(x => x.Path == c.Path || x.Path.StartsWith(c.Path + "/"))
+                    .Sum(x => x.MemoryCount)))
             .OrderBy(c => c.Path)
             .ToList();
 

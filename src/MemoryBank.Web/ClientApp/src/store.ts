@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { EdgeType, GraphQuery } from "./api/types";
 
+export type ViewMode = "2d" | "3d";
+
 interface AppState {
   // Filters
   edgeTypes: EdgeType[];
@@ -14,6 +16,12 @@ interface AppState {
   limit: number;
 
   // UI state
+  viewMode: ViewMode;
+  sizingStrategies: string[];
+  sidebarOpen: boolean;
+  // Incremented when the user explicitly asks to re-layout (refresh button).
+  // Graph components watch this to discard cached node positions.
+  layoutResetToken: number;
   selectedNodeId: string | null;
   hoveredNodeId: string | null;
   searchQuery: string;
@@ -30,6 +38,11 @@ interface AppState {
   setSimThreshold: (v: number) => void;
   setSimTopK: (v: number) => void;
   setTagJaccardMin: (v: number) => void;
+  setViewMode: (v: ViewMode) => void;
+  setSizingStrategies: (v: string[]) => void;
+  toggleSizingStrategy: (id: string) => void;
+  setSidebarOpen: (v: boolean) => void;
+  bumpLayoutResetToken: () => void;
   setSelectedNode: (id: string | null) => void;
   setHoveredNode: (id: string | null) => void;
   setSearchQuery: (v: string) => void;
@@ -49,6 +62,10 @@ export const useStore = create<AppState>((set, get) => ({
   tagJaccardMin: 0.3,
   limit: 1000,
 
+  viewMode: "2d",
+  sizingStrategies: ["access", "priority"],
+  sidebarOpen: true,
+  layoutResetToken: 0,
   selectedNodeId: null,
   hoveredNodeId: null,
   searchQuery: "",
@@ -68,6 +85,17 @@ export const useStore = create<AppState>((set, get) => ({
   setSimThreshold: (v) => set({ simThreshold: v }),
   setSimTopK: (v) => set({ simTopK: v }),
   setTagJaccardMin: (v) => set({ tagJaccardMin: v }),
+  setViewMode: (v) => set({ viewMode: v }),
+  setSizingStrategies: (v) => set({ sizingStrategies: v }),
+  toggleSizingStrategy: (id) =>
+    set((s) => ({
+      sizingStrategies: s.sizingStrategies.includes(id)
+        ? s.sizingStrategies.filter((x) => x !== id)
+        : [...s.sizingStrategies, id],
+    })),
+  setSidebarOpen: (v) => set({ sidebarOpen: v }),
+  bumpLayoutResetToken: () =>
+    set((s) => ({ layoutResetToken: s.layoutResetToken + 1 })),
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setHoveredNode: (id) => set({ hoveredNodeId: id }),
   setSearchQuery: (v) => set({ searchQuery: v }),

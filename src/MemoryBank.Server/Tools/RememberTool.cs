@@ -34,7 +34,7 @@ public class RememberTool
         [Description("Category path, e.g. 'projects/backend' (auto-created)")] string? category = null,
         [Description("Priority 1-5: trivial(1), low(2), normal(3), high(4), critical(5)")] int priority = 3,
         [Description("Tags as comma-separated values, e.g. 'auth,jwt,security'")] string? tags = null,
-        [Description("Type: fact, decision, procedure, reference, observation")] string type = "fact",
+        [Description("Type: todo, decision, reference, guide")] string type = "reference",
         [Description("Source identifier, e.g. 'conversation', 'manual'")] string? source = null,
         [Description("Short summary (auto-generated if omitted)")] string? summary = null,
         [Description("JSON metadata object")] string? metadata = null)
@@ -54,7 +54,7 @@ public class RememberTool
 
         if (!Enum.TryParse<MemoryType>(type, ignoreCase: true, out var memoryType))
             return ToolResponse<object>.Fail(ErrorCodes.ValidationFailed,
-                $"Invalid type '{type}'. Must be one of: fact, decision, procedure, reference, observation").ToJson();
+                $"Invalid type '{type}'. Must be one of: todo, decision, reference, guide").ToJson();
 
         var tagList = ParseTags(tags);
         if (tagList.Count > _config.Validation.MaxTagsPerMemory)

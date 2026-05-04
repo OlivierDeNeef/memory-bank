@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D, { ForceGraphMethods } from "react-force-graph-2d";
 import { forceCollide, forceManyBody, type ForceLink } from "d3-force";
 import type { GraphEdge, GraphNode, GraphResponse } from "../api/types";
-import { categoryColor, edgeColors } from "../lib/colors";
+import { edgeColors, pinnedColor, typeColor } from "../lib/colors";
+import { computeBaseSize, UNIFORM_BASE_SIZE } from "../lib/nodeSizing";
 import { useStore } from "../store";
 
 type FGNode = GraphNode & { x?: number; y?: number };
@@ -17,6 +18,8 @@ export function Graph2D({ graph }: Props) {
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const hoveredNodeId = useStore((s) => s.hoveredNodeId);
   const searchScores = useStore((s) => s.searchScores);
+  const sizingStrategies = useStore((s) => s.sizingStrategies);
+  const layoutResetToken = useStore((s) => s.layoutResetToken);
   const simThreshold = useStore((s) => s.simThreshold);
   const tagJaccardMin = useStore((s) => s.tagJaccardMin);
   const setSelectedNode = useStore((s) => s.setSelectedNode);
@@ -47,28 +50,37 @@ export function Graph2D({ graph }: Props) {
   }, [selectedNodeId, graph]);
 
   // Stable layout setup — runs only when the graph itself changes (new nodes/edges).
-  // Strong charge + long links + generous collide ensure the base layout is well-spaced,
-  // so any later size changes produce only tiny local adjustments.
+  // Tuned to minimize edge crossings: strong link pull brings connected nodes together,
+  // and variable link distance (stronger edges → shorter distance) lets tight clusters
+  // form naturally so weakly-related nodes drift to the periphery instead of cutting
+  // through clusters.
   useEffect(() => {
     if (!fgRef.current) return;
 
-    fgRef.current.d3Force("charge", forceManyBody<FGNode>().strength(-420));
+    fgRef.current.d3Force("charge", buildChargeForce());
 
     const linkForce = fgRef.current.d3Force("link") as ForceLink<FGNode, FGLink> | null;
     if (linkForce) {
-      linkForce.distance(140).strength(0.35);
+      // Distance: strong edge (weight=1) → 60px, weak edge (at threshold) → 200px.
+      // This rewards tightly-related pairs with proximity and pushes weak links to the edge.
+      linkForce
+        .distance((l: FGLink) => 200 - edgeStrength(l) * 140)
+        .strength((l: FGLink) => 0.4 + edgeStrength(l) * 0.5);
     }
 
     fgRef.current.d3Force(
       "collide",
       forceCollide<FGNode>((node) => nodeSize(node) + 6).strength(0.9).iterations(2)
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph]);
 
-  // When search scores arrive, only collision radii need to update. We don't touch charge
-  // or link forces so the overall topology is preserved. A brief reheat is unavoidable
-  // (react-force-graph doesn't expose fine-grained alpha control), but the strong damping
-  // below (d3VelocityDecay=0.7) means the motion dissipates within a few ticks.
+  // When search scores arrive, both the collide radius AND the charge strength need to
+  // refresh: d3's forceManyBody caches the per-node strength at .initialize() time, so
+  // the size-aware strength fn must be re-applied for bigger (search-matched) nodes to
+  // actually push their neighbors away with more force. The strong damping
+  // (d3VelocityDecay=0.7) keeps the resulting reheat short and gentle.
+  // Sizing-strategy toggles go through the same path for the same reason.
   const skipNextEffect = useRef(true); // skip on initial mount
   useEffect(() => {
     if (!fgRef.current) return;
@@ -81,17 +93,69 @@ export function Graph2D({ graph }: Props) {
       "collide",
       forceCollide<FGNode>((node) => nodeSize(node) + 6).strength(0.9).iterations(2)
     );
+    fgRef.current.d3Force("charge", buildChargeForce());
     fgRef.current.d3ReheatSimulation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchScores]);
+  }, [searchScores, sizingStrategies]);
+
+  // Shared charge-force factory. Strength scales linearly with node radius so a node
+  // drawn 6× larger during search repels neighbors ~6× harder — the visible gap around
+  // it then grows in step with the node itself, instead of shrinking because the center
+  // moved but the force stayed flat.
+  function buildChargeForce() {
+    return forceManyBody<FGNode>()
+      .strength((node) => -160 * (nodeSize(node) / UNIFORM_BASE_SIZE))
+      .distanceMax(360);
+  }
+
+  // Position cache: when a filter change causes a refetch, react-force-graph replaces the
+  // graphData and re-heats the simulation at alpha=1. Without seeded positions, nodes start
+  // from wherever the old references put them (or random) and visibly jump. By carrying
+  // x/y/vx/vy forward by id, the refreshed simulation begins at the previous steady state,
+  // so only the delta (new/removed edges) produces motion.
+  const prevNodesRef = useRef<Map<string, FGNode>>(new Map());
+  const lastResetToken = useRef(layoutResetToken);
+  const [hasMounted, setHasMounted] = useState(false);
 
   const data = useMemo(() => {
-    if (!graph) return { nodes: [], links: [] };
+    // Manual refresh bumps the token → drop cached positions so the simulation
+    // re-lays out from scratch instead of inheriting drifted/velocity-carrying state.
+    if (lastResetToken.current !== layoutResetToken) {
+      prevNodesRef.current = new Map();
+      lastResetToken.current = layoutResetToken;
+    }
+    if (!graph) {
+      prevNodesRef.current = new Map();
+      return { nodes: [], links: [] };
+    }
+    const prior = prevNodesRef.current;
+    const nodes = graph.nodes.map((n) => {
+      const next: FGNode = { ...n };
+      const p = prior.get(n.id);
+      if (p?.x != null && p?.y != null) {
+        next.x = p.x;
+        next.y = p.y;
+        (next as FGNode & { vx?: number; vy?: number }).vx =
+          (p as FGNode & { vx?: number }).vx ?? 0;
+        (next as FGNode & { vx?: number; vy?: number }).vy =
+          (p as FGNode & { vy?: number }).vy ?? 0;
+      }
+      return next;
+    });
+    // Store references to the new nodes; the simulation mutates x/y on these objects,
+    // so the cache stays current for the next refetch.
+    prevNodesRef.current = new Map(nodes.map((n) => [n.id, n]));
     return {
-      nodes: graph.nodes as FGNode[],
+      nodes,
       links: graph.edges.map((e) => ({ ...e })) as FGLink[],
     };
-  }, [graph]);
+  }, [graph, layoutResetToken]);
+
+  // After the first graph renders, drop warmup ticks to zero so subsequent refetches
+  // animate visibly instead of running warmup invisibly (which reads as a snap).
+  useEffect(() => {
+    if (graph && !hasMounted) setHasMounted(true);
+  }, [graph, hasMounted]);
 
   const searchActive = searchScores !== null;
   const focus = hoveredNodeId ?? selectedNodeId;
@@ -103,9 +167,7 @@ export function Graph2D({ graph }: Props) {
   };
 
   const nodeSize = (node: FGNode) => {
-    const base = 4 + Math.log2(node.accessCount + 1) * 1.2;
-    const priorityBoost = (node.priority - 3) * 0.5;
-    const baseSize = Math.max(3, base + priorityBoost);
+    const baseSize = computeBaseSize(node, sizingStrategies);
 
     if (!searchActive) return baseSize;
 
@@ -122,17 +184,18 @@ export function Graph2D({ graph }: Props) {
 
   const drawNode = (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const size = nodeSize(node);
-    const color = categoryColor(node.categoryPath);
+    const color = typeColor(node.type);
     const dimmed = isDimmed(node.id);
     const isFocused = focus === node.id;
 
     ctx.globalAlpha = dimmed ? 0.2 : 1;
 
-    // Pinned: soft yellow halo underneath the color glow
+    // Pinned: soft halo underneath the color glow, in the reserved pinned hue
+    // (no type color uses this yellow, so the halo is unambiguous).
     if (node.pinned) {
       const haloGrad = ctx.createRadialGradient(node.x!, node.y!, size, node.x!, node.y!, size * 2.2);
-      haloGrad.addColorStop(0, "rgba(253, 224, 71, 0.35)");
-      haloGrad.addColorStop(1, "rgba(253, 224, 71, 0)");
+      haloGrad.addColorStop(0, withAlpha(pinnedColor, 0.35));
+      haloGrad.addColorStop(1, withAlpha(pinnedColor, 0));
       ctx.fillStyle = haloGrad;
       ctx.beginPath();
       ctx.arc(node.x!, node.y!, size * 2.2, 0, Math.PI * 2);
@@ -161,40 +224,6 @@ export function Graph2D({ graph }: Props) {
     ctx.stroke();
 
     ctx.globalAlpha = 1;
-  };
-
-  // Post-render pass: draw the focused node's label AFTER all nodes have been painted
-  // so labels are never covered by neighboring nodes.
-  const drawFocusedLabel = (ctx: CanvasRenderingContext2D, globalScale: number) => {
-    if (!focus || !graph) return;
-    const node = graph.nodes.find((n) => n.id === focus) as FGNode | undefined;
-    if (!node || node.x == null || node.y == null) return;
-
-    const size = nodeSize(node);
-    const fontSize = Math.max(10, 12 / globalScale);
-    ctx.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-
-    const label = node.label;
-    const textY = node.y + size + 3;
-    const metrics = ctx.measureText(label);
-    const padX = 4 / globalScale;
-    const padY = 2 / globalScale;
-
-    ctx.fillStyle = "rgba(0, 0, 0, 0.78)";
-    roundRect(
-      ctx,
-      node.x - metrics.width / 2 - padX,
-      textY - padY,
-      metrics.width + padX * 2,
-      fontSize + padY * 2,
-      3 / globalScale
-    );
-    ctx.fill();
-
-    ctx.fillStyle = "#e5e7eb";
-    ctx.fillText(label, node.x, textY);
   };
 
   // Custom pointer hit area (the label doesn't intercept clicks)
@@ -269,10 +298,10 @@ export function Graph2D({ graph }: Props) {
       linkDirectionalParticleSpeed={0.006}
       onNodeHover={(node) => setHoveredNode((node as FGNode | null)?.id ?? null)}
       onNodeClick={(node) => setSelectedNode((node as FGNode).id)}
+      onNodeDrag={() => fgRef.current?.d3ReheatSimulation()}
       onBackgroundClick={() => setSelectedNode(null)}
-      onRenderFramePost={drawFocusedLabel}
-      cooldownTicks={120}
-      warmupTicks={30}
+      cooldownTicks={300}
+      warmupTicks={hasMounted ? 0 : 60}
       // High damping + fast alpha decay → when search reheats the simulation, nodes only
       // shift a few pixels to resolve new overlaps instead of drifting across the canvas.
       d3VelocityDecay={0.7}
@@ -286,23 +315,6 @@ export function Graph2D({ graph }: Props) {
 
 function endpointId(endpoint: string | FGNode): string {
   return typeof endpoint === "string" ? endpoint : endpoint.id;
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
 
 function withAlpha(hex: string, alpha: number): string {

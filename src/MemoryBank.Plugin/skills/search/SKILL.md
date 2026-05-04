@@ -29,7 +29,7 @@ Extract from user input:
 - **--category** — Category path filter
 - **--tags** — Comma-separated tags
 - **--tag-mode** — `and` or `or` (default: `or`)
-- **--type** — `fact`, `decision`, `procedure`, `reference`, `observation`
+- **--type** — `todo`, `decision`, `reference`, `guide`
 - **--from** — Date range start (ISO 8601)
 - **--to** — Date range end (ISO 8601)
 - **--priority** — Minimum priority (1-5)

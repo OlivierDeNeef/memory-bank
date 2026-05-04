@@ -66,7 +66,7 @@ public class ValidationConfig
 public class MemoryDefaults
 {
     public int DefaultPriority { get; set; } = 3;
-    public string DefaultType { get; set; } = "fact";
+    public string DefaultType { get; set; } = "reference";
     public float DuplicateThreshold { get; set; } = 0.90f;
 }
 

@@ -2,7 +2,7 @@
 name: recall
 description: Search and recall memories from MemoryBank using hybrid semantic + keyword search. Use when looking up stored knowledge.
 user-invocable: true
-argument-hint: "<query> [--category <path>] [--tags <t1,t2>] [--type <fact|decision|procedure|reference|observation>] [--limit <n>]"
+argument-hint: "<query> [--category <path>] [--tags <t1,t2>] [--type <todo|decision|reference|guide>] [--limit <n>]"
 ---
 
 # MemoryBank Recall
@@ -23,7 +23,7 @@ Extract from user input:
 - **query** — The search text (required unless showing recent)
 - **--category** — Filter to category path (e.g., `projects/backend`)
 - **--tags** — Comma-separated tag filter
-- **--type** — Memory type filter: `fact`, `decision`, `procedure`, `reference`, `observation`
+- **--type** — Memory type filter: `todo`, `decision`, `reference`, `guide`
 - **--limit** — Max results (default: 10)
 - **--priority** — Minimum priority (1-5)
 

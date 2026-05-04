@@ -26,7 +26,7 @@ public class RecallTool
         [Description("Filter by tags (comma-separated)")] string? tags = null,
         [Description("Tag filter mode: 'and' or 'or'")] string tagMode = "or",
         [Description("Minimum priority (1-5)")] int? minPriority = null,
-        [Description("Filter by type: fact, decision, procedure, reference, observation")] string? type = null,
+        [Description("Filter by type: todo, decision, reference, guide")] string? type = null,
         [Description("Filter from date (ISO 8601)")] string? dateFrom = null,
         [Description("Filter to date (ISO 8601)")] string? dateTo = null,
         [Description("Include archived memories")] bool includeArchived = false,
