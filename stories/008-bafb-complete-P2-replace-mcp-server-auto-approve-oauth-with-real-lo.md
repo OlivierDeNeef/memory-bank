@@ -1,10 +1,10 @@
 ---
-id: "008-bafb"
-title: "Replace MCP server auto-approve OAuth with real login + token validation"
-status: pending
+id: 008-bafb
+title: Replace MCP server auto-approve OAuth with real login + token validation
+status: complete
 priority: P2
-created: 2026-05-04T21:07:27.934Z
-updated: 2026-05-04T21:07:27.934Z
+created: "2026-05-04T21:07:27.934Z"
+updated: "2026-05-04T21:29:31.722Z"
 dependencies: []
 ---
 
@@ -19,4 +19,6 @@ Rewrite `OAuthEndpoints.cs`: GET `/oauth/authorize` renders a login form preserv
 - [ ] Implement as described
 
 ## Work Log
+
+### 2026-05-04T21:29:31.514Z - Implemented real OAuth login: CredentialValidator, LoginPage HTML, BearerTokenMiddleware, refresh_token grant. CLI --hash-password, fail-fast on missing env vars. 54 tests pass on commit 08c88cd
 

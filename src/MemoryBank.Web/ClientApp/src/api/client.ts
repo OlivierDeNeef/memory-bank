@@ -7,7 +7,12 @@ import type {
 } from "./types";
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, { signal });
+  const response = await fetch(url, { signal, credentials: "same-origin" });
+  if (response.status === 401) {
+    // Session expired — bounce through the server's auth gate, which redirects to login.
+    window.location.href = `/auth/login?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    throw new Error("Session expired, redirecting to sign-in");
+  }
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText} — ${url}`);
   }

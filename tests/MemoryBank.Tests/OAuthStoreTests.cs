@@ -50,6 +50,39 @@ public class OAuthStoreTests : IDisposable
     }
 
     [Fact]
+    public void EnsureClient_Inserts_When_New()
+    {
+        var client = _store.EnsureClient("fixed-id", "viewer", new[] { "https://x/cb" });
+        Assert.Equal("fixed-id", client.ClientId);
+
+        var fetched = _store.GetClient("fixed-id");
+        Assert.NotNull(fetched);
+        Assert.Equal("viewer", fetched.ClientName);
+        Assert.Equal("https://x/cb", fetched.RedirectUris[0]);
+    }
+
+    [Fact]
+    public void EnsureClient_Updates_Name_And_Uris_On_Conflict()
+    {
+        _store.EnsureClient("fixed-id", "viewer", new[] { "https://old/cb" });
+        _store.EnsureClient("fixed-id", "viewer-renamed", new[] { "https://new/cb" });
+
+        var fetched = _store.GetClient("fixed-id");
+        Assert.NotNull(fetched);
+        Assert.Equal("viewer-renamed", fetched.ClientName);
+        Assert.Equal("https://new/cb", fetched.RedirectUris[0]);
+    }
+
+    [Fact]
+    public void EnsureClient_Is_Idempotent()
+    {
+        var first = _store.EnsureClient("fixed-id", "viewer", new[] { "https://x/cb" });
+        var second = _store.EnsureClient("fixed-id", "viewer", new[] { "https://x/cb" });
+
+        Assert.Equal(first.ClientId, second.ClientId);
+    }
+
+    [Fact]
     public void IssueAuthCode_And_Consume_With_PKCE_Succeeds()
     {
         var client = _store.RegisterClient("c", new[] { "https://example.com/cb" });

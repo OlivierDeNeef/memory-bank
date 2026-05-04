@@ -38,6 +38,28 @@ public class OAuthStore
         return new OAuthClient(clientId, clientName, redirectUris, now);
     }
 
+    /// <summary>
+    /// Idempotent client registration with a caller-chosen <paramref name="clientId"/>. Used by
+    /// the web viewer to register itself with a stable id across restarts.
+    /// </summary>
+    public OAuthClient EnsureClient(string clientId, string clientName, string[] redirectUris)
+    {
+        var now = DateTime.UtcNow;
+        using var cmd = _db.CreateCommand("""
+            INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created_at)
+            VALUES (@id, @name, @uris, @created)
+            ON CONFLICT(client_id) DO UPDATE SET
+                client_name = excluded.client_name,
+                redirect_uris = excluded.redirect_uris
+            """);
+        cmd.Parameters.AddWithValue("@id", clientId);
+        cmd.Parameters.AddWithValue("@name", clientName);
+        cmd.Parameters.AddWithValue("@uris", JsonSerializer.Serialize(redirectUris));
+        cmd.Parameters.AddWithValue("@created", FormatTime(now));
+        cmd.ExecuteNonQuery();
+        return GetClient(clientId)!;
+    }
+
     public OAuthClient? GetClient(string clientId)
     {
         using var cmd = _db.CreateCommand("""
