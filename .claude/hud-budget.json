@@ -1,12 +1,12 @@
 {
-  "fiveHour": 8,
-  "sevenDay": 6,
-  "sevenDaySonnet": 0,
+  "fiveHour": 49,
+  "sevenDay": 11,
+  "sevenDaySonnet": 1,
   "sevenDayOpus": null,
-  "fiveHourResetAt": "2026-04-18T15:00:00.390Z",
-  "sevenDayResetAt": "2026-04-24T07:00:00.390Z",
-  "sevenDaySonnetResetAt": null,
+  "fiveHourResetAt": "2026-05-06T00:30:00.227Z",
+  "sevenDayResetAt": "2026-05-09T02:00:00.227Z",
+  "sevenDaySonnetResetAt": "2026-05-09T02:00:01.227Z",
   "sevenDayOpusResetAt": null,
   "extraUsageEnabled": true,
-  "updatedAt": 1776509685256
+  "updatedAt": 1778020981456
 }

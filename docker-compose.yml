@@ -6,7 +6,7 @@ services:
     ports:
       - "6868:6868"
     volumes:
-      - memorybank-data:/data/memorybank
+      - ./data:/data/memorybank
     restart: unless-stopped
 
   memorybank-web:
@@ -16,12 +16,7 @@ services:
     ports:
       - "5174:5174"
     volumes:
-      # Share the DB file with the MCP server. SQLite + WAL handles concurrent readers;
-      # writes from the web app are not expected since the viewer is read-only.
-      - memorybank-data:/data/memorybank
+      - ./data:/data/memorybank
     restart: unless-stopped
     depends_on:
       - memorybank
-
-volumes:
-  memorybank-data:

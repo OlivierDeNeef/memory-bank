@@ -15,9 +15,16 @@ RUN dotnet publish src/MemoryBank.Server/MemoryBank.Server.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-RUN mkdir -p /data/memorybank /data/memorybank/backups /data/memorybank/logs
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data/memorybank /data/memorybank/backups /data/memorybank/logs
 
 COPY --from=build /app/publish .
+
+RUN mkdir -p Embeddings/Models \
+    && curl -fSL -o Embeddings/Models/model.onnx \
+       "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model.onnx"
 
 ENV MEMORYBANK_TRANSPORT=http
 ENV ASPNETCORE_URLS=http://0.0.0.0:6868

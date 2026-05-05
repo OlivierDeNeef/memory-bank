@@ -40,6 +40,10 @@ RUN apt-get update \
 
 COPY --from=build /app/publish .
 
+RUN mkdir -p Embeddings/Models \
+    && curl -fSL -o Embeddings/Models/model.onnx \
+    "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model.onnx"
+
 ENV ASPNETCORE_URLS=http://0.0.0.0:5174
 ENV MemoryBank__Database__Path=/data/memorybank/memorybank.db
 ENV MemoryBank__Backup__Path=/data/memorybank/backups
